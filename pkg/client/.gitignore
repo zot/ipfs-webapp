@@ -1,0 +1,20 @@
+# Go binary
+/ipfs-webapp
+
+# TypeScript build artifacts
+/pkg/client/dist/
+/pkg/client/node_modules/
+
+# Generated client library in demo directory
+/internal/commands/demo/*.js
+/internal/commands/demo/*.d.ts
+
+# Test artifacts
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

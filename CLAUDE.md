@@ -1,0 +1,209 @@
+# ipfs-webapp
+- A Go application to host peer-to-peer applications
+- Proxies opinionated IPFS and libp2p operations for managed peers
+- Provides a TypeScript library for easy communication with the Go application
+
+## 🎯 Core Principles
+- Use **SOLID principles** in all implementations
+- Create comprehensive **unit tests** for all components
+- code and specs are as MINIMAL as POSSIBLE
+
+## 🔨 Building
+```bash
+# Run the demo (automatically builds)
+make demo
+
+# Build everything (TypeScript library + Go binary)
+make build      # or just: make
+                # automatically installs dependencies if needed
+
+# Clean all build artifacts
+make clean
+```
+
+The build process:
+1. Checks and installs TypeScript dependencies if `node_modules` is missing
+2. Compiles the TypeScript client library (`pkg/client/src/`) to ES modules
+3. Copies the compiled library to `internal/commands/demo/` where it's embedded with the demo HTML
+4. Builds the Go binary with the embedded assets
+5. Users can extract the client library from the demo directory for use in their own projects
+
+## Form: a single Go executable for the server and a TypeScript library for the browser
+- the TypeScript library (`pkg/client/`) provides a clean API over the WebSocket protocol
+  - located at `pkg/client/src/`
+  - compiled to ES modules and bundled with the demo
+  - promise-based API for all operations
+  - uses protocol-based addressing with (peer, protocol) tuples instead of connection IDs
+  - `start(protocol, onData)` registers listener that receives (peer, data) for all messages on that protocol
+  - `send(peer, protocol, data)` sends data directly using peer+protocol addressing
+  - server manages all connection lifecycle, retry, and reliability concerns transparently
+  - listeners automatically removed on `stop()` or WebSocket disconnect
+  - the demo (`internal/commands/demo/index.html`) demonstrates how to use the library
+  - users can get the library from the demo directory after building
+- implements a web server to launch a site on a random port on localhost
+- uses [ipfs-lite](https://github.com/hsanjuan/ipfs-lite) to manage the IPFS connection
+- manages peers for browser connections
+- commands
+  - serve
+    - current dir must contain these subdirectories
+      - html: website to serve, must contain index.html
+        - launches this in a browser by default
+      - ipfs: content to make available in IPFS
+      - storage: server storage (peer keys, etc.)
+    - hosts WebSocket-based JSON-RPC protocol service for the site
+      - use text-bsed JSON for commands
+      - each side pushes commands to the other
+    - flags
+      - --noopen: do not open browser automatically
+      - -v, --verbose: verbose output (can be specified multiple times: -v, -vv, -vvv)
+        - level 1: log peer creation, connections, and messages
+        - level 2+: additional debug information
+  - demo
+    - current dir must be empty
+    - copies an embedded chatroom example into a directory and serves it
+    - flags
+      - --noopen: do not open browser automatically
+      - -v, --verbose: verbose output (can be specified multiple times: -v, -vv, -vvv)
+    - chatroom demo features
+      - uses listPeers to discover peers subscribed to the chat topic
+      - displays a list of peers on the right side
+        - first entry: "Chat room" (room chat mode)
+        - remaining entries: individual users
+      - two communication modes indicated at the top of the view
+        - room chat (default)
+          - uses pubsub for group messaging
+          - selected by clicking "Chat room" in the peer list
+        - direct messaging
+          - uses peer-to-peer protocol for private messages
+          - selected by clicking a user in the peer list
+      - demo listener architecture
+        - single protocol listener registered at startup with `start(protocol, onData)`
+        - **room chat**: `subscribe` callback always stores messages via `storeRoomMessage()`
+          - stores messages even when in DM mode (never lost)
+          - only displays messages if currently in room mode
+          - when switching to room mode, `displayStoredRoomMessages()` shows all stored messages
+        - **direct messages**: protocol listener callback receives `(peer, data)` and:
+          - always stores messages via `storeDMMessage(peer, ...)` (never lost)
+          - only displays via `addMessage()` if currently viewing that DM
+        - `switchToDM()` simply switches UI view - no connection management needed
+        - server transparently manages all stream lifecycle and reliability
+  - version
+    displays the current version
+
+## Message format
+- a request has a requestID
+  - starts at 0 and counts up
+- a response contains the ID of its request
+- message definitions are name(param...) params are strings unless otherwise indicated
+  - Each message corresponds to a JSON-encodable Go struct in the server and a TypeScript struct in the browser
+  - JSON properties are lowercase
+
+## Client Request messages
+
+### Peer(peerid?)
+- Create a new peer for this websocket connection with peerid. If none given, use a fresh peerid.
+- Must be the first command from the browser for a websocket connection
+- Cannot be sent more than once
+- on the server, the new peer is associated with this WebSocket connection
+#### Response: peerid or error
+
+### start(protocol)
+- Start a protocol and register to receive messages
+- Must be called before sending on the protocol
+- Protocol validation: cannot send unless protocol is started
+#### Response: null or error
+
+### stop(protocol)
+- Stop a protocol and remove message listener
+#### Response: null or error
+
+### send(peer, protocol, data: any)
+- Send data to a peer on a protocol
+- Uses (peer, protocol) addressing instead of connection IDs
+- Server manages stream lifecycle transparently
+- Validation: protocol must be started first
+#### Response: null or error
+
+### subscribe(topic: string)
+#### Response: null or error
+
+### publish(topic, data: any)
+#### Response: null or error
+
+### unsubscribe(topic)
+#### Response: null or error
+
+### listPeers(topic: string)
+- Get list of peers subscribed to a topic
+#### Response: array of peer IDs or error
+
+## Server Request messages
+
+### peerData(peer, protocol, data: any)
+- Notifies client of data received from a peer on a protocol
+- Sent to the protocol listener registered with `start(protocol, onData)`
+- Listener receives `(peer, data)` for all messages on the protocol
+#### Response: null or error
+
+### topicData(topic, peerId, data: any)
+#### Response: null or error
+
+## Implementation Details
+
+### Virtual Connection Model
+The server manages all connection lifecycle transparently using a virtual connection model:
+- Client uses (peer, protocol) tuples for addressing instead of connection IDs
+- Server internally manages libp2p streams using `"peerID:protocol"` keys
+- Streams are created on-demand when sending data
+- Streams are automatically reused for multiple messages
+- Server handles all retry logic, buffering, and reliability concerns
+- Client API is simplified - no connection state management needed
+
+### Private Address Support
+libp2p by default blocks connections on private/localhost addresses. To enable local development and testing:
+- `internal/peer/manager.go` implements `allowPrivateGater` type
+- This ConnectionGater returns `true` for all connection gating methods
+- Passed to `libp2p.New()` via `libp2p.ConnectionGater(&allowPrivateGater{})`
+- Allows peers on the same machine to connect via localhost addresses
+
+### Verbose Logging
+Complete verbose logging with peer aliases:
+- Manager tracks: `peerAliases` map (peerID→alias), `aliasCounter`, `verbosity` level
+- Peer struct includes `alias` field
+- Aliases generated as "peer-a", "peer-b", etc.
+- Verbose output preceded by peer alias: `[peer-a] message`
+- Logging at different verbosity levels:
+  - Level 1: peer creation, connections, messages
+  - Level 2: WebSocket message send/receive with request IDs
+  - Level 3+: additional debug information
+
+### Client Library Message Handling
+The TypeScript client library implements robust message handling with proper ordering:
+
+#### Sequential Message Processing
+- Server-initiated messages are queued and processed strictly sequentially
+- Messages processed one at a time via `processMessageQueue()` with async/await
+- Ensures message ordering is preserved (critical for peerData)
+- Each message fully processed before the next begins
+- Error handling wraps each message processing to continue on failure
+- Response messages (replies to client requests) are NOT queued - processed immediately
+
+#### Protocol-Based Message Routing
+- `start(protocol, onData)` registers a listener for a protocol
+- Listener receives `(peer, data)` for all messages on that protocol
+- `peerData` messages routed directly to the protocol listener
+- No buffering needed - messages delivered immediately to registered listener
+- `stop(protocol)` removes the listener and prevents further message delivery
+- Simple, straightforward routing with no connection state to manage
+
+#### Async Callback Support
+- All callbacks (ProtocolDataCallback, TopicDataCallback) support both sync and async
+- Type signature: `(peer: string, data: any) => void | Promise<void>`
+- Client library awaits callback completion with try/catch error handling
+- Errors logged to console but don't stop message processing
+
+#### Protocol Lifecycle
+- `start(protocol, onData)`: Register protocol listener, enable sending
+- `peerData(peer, protocol, data)`: Route to protocol listener
+- `send(peer, protocol, data)`: Validate protocol started, send message
+- `stop(protocol)`: Remove listener, disable sending

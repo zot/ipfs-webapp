@@ -1,0 +1,25 @@
+{
+  "name": "@ipfs-webapp/client",
+  "version": "0.1.0",
+  "description": "TypeScript client library for ipfs-webapp",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ipfs",
+    "libp2p",
+    "p2p",
+    "websocket",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

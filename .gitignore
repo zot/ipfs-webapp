@@ -1,0 +1,41 @@
+# Binaries
+ipfs-webapp
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Application data
+storage/
+html/
+ipfs/
+
+# Node modules and build
+node_modules/
+dist/
+*.log
+package-lock.json
+
+# Keep demo files in repo
+!internal/commands/demo/
+/.playwright-mcp/

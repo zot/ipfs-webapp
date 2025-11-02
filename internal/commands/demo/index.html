@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Chatroom Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        #peer-id {
+            font-size: 0.875rem;
+            opacity: 0.8;
+            font-family: monospace;
+        }
+
+        .status {
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.875rem;
+        }
+
+        .status.connecting {
+            background: #f39c12;
+            color: white;
+        }
+
+        .status.connected {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status.error {
+            background: #e74c3c;
+            color: white;
+        }
+
+        #mode-indicator {
+            background: #34495e;
+            color: white;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        #chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            overflow: hidden;
+        }
+
+        #messages {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 4px;
+            background: #ecf0f1;
+        }
+
+        .message.own {
+            background: #3498db;
+            color: white;
+            margin-left: 2rem;
+        }
+
+        .message.other {
+            background: #ecf0f1;
+            margin-right: 2rem;
+        }
+
+        .message.system {
+            background: #95a5a6;
+            color: white;
+            text-align: center;
+            font-size: 0.875rem;
+            padding: 0.5rem;
+        }
+
+        .message .peer {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-bottom: 0.25rem;
+            font-family: monospace;
+        }
+
+        .message .text {
+            word-wrap: break-word;
+        }
+
+        .message .time {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-top: 0.25rem;
+        }
+
+        #input-area {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        #peer-list-area {
+            width: 250px;
+            background: white;
+            border-left: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #peer-list-header {
+            padding: 1rem;
+            background: #ecf0f1;
+            border-bottom: 1px solid #ddd;
+            font-weight: 600;
+        }
+
+        #peer-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .peer-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #ecf0f1;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .peer-item:hover {
+            background: #f8f9fa;
+        }
+
+        .peer-item.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .peer-item.room {
+            font-weight: 600;
+            background: #ecf0f1;
+        }
+
+        .peer-item.room.active {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .peer-item .peer-name {
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .peer-item .peer-id {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            font-family: monospace;
+        }
+
+        .peer-item.active .peer-id {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>P2P Chatroom Demo</h1>
+        <div id="peer-id">Connecting...</div>
+    </header>
+
+    <div id="status" class="status connecting">Connecting to server...</div>
+    <div id="mode-indicator">Chat room</div>
+
+    <main>
+        <div id="chat-area">
+            <div id="messages"></div>
+            <div id="input-area">
+                <input type="text" id="message-input" placeholder="Type a message..." disabled>
+                <button id="send-button" disabled>Send</button>
+            </div>
+        </div>
+
+        <div id="peer-list-area">
+            <div id="peer-list-header">Peers</div>
+            <div id="peer-list">
+                <div class="peer-item room active" data-peer-id="room">
+                    <div class="peer-name">Chat room</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        // Import the IPFSWebAppClient from the built library
+        import { IPFSWebAppClient } from './index.js';
+
+        // Application
+        const client = new IPFSWebAppClient();
+        const messagesDiv = document.getElementById('messages');
+        const statusDiv = document.getElementById('status');
+        const peerIDDiv = document.getElementById('peer-id');
+        const modeIndicator = document.getElementById('mode-indicator');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const peerList = document.getElementById('peer-list');
+
+        const ROOM_TOPIC = 'chatroom';
+        const PROTOCOL = '/chat/1.0.0';
+
+        let currentMode = 'room'; // 'room' or 'dm'
+        let currentPeerID = null;
+        let peers = new Map(); // peerID -> { name }
+        let dmMessages = new Map(); // peerID -> [{text, isOwn, timestamp}]
+        let roomMessages = []; // Store room messages: [{senderPeerID, text, isOwn, timestamp}]
+
+        function storeRoomMessage(senderPeerID, text, isOwn) {
+            roomMessages.push({
+                senderPeerID,
+                text,
+                isOwn,
+                timestamp: new Date()
+            });
+        }
+
+        function storeDMMessage(peerID, text, isOwn) {
+            if (!dmMessages.has(peerID)) {
+                dmMessages.set(peerID, []);
+            }
+            dmMessages.get(peerID).push({
+                text,
+                isOwn,
+                timestamp: new Date()
+            });
+        }
+
+        function addMessage(peerID, text, isOwn, isSystem = false, skipStorage = false) {
+            // Store DM messages for later retrieval (but not when displaying from storage)
+            if (!isSystem && !skipStorage && currentMode === 'dm' && peerID) {
+                storeDMMessage(currentPeerID, text, isOwn);
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSystem ? 'system' : isOwn ? 'own' : 'other'}`;
+
+            if (!isSystem) {
+                const peerDiv = document.createElement('div');
+                peerDiv.className = 'peer';
+                peerDiv.textContent = isOwn ? 'You' : `Peer: ${peerID.substring(0, 8)}...`;
+                messageDiv.appendChild(peerDiv);
+            }
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'text';
+            textDiv.textContent = text;
+            messageDiv.appendChild(textDiv);
+
+            if (!isSystem) {
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'time';
+                timeDiv.textContent = new Date().toLocaleTimeString();
+                messageDiv.appendChild(timeDiv);
+            }
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function setStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function updateMode(mode, targetPeerID = null) {
+            currentMode = mode;
+            currentPeerID = targetPeerID;
+
+            if (mode === 'room') {
+                modeIndicator.textContent = 'Chat room';
+            } else {
+                modeIndicator.textContent = `Direct message: ${targetPeerID.substring(0, 8)}...`;
+            }
+
+            // Update active state in peer list
+            document.querySelectorAll('.peer-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            const activeItem = mode === 'room'
+                ? document.querySelector('.peer-item.room')
+                : document.querySelector(`[data-peer-id="${targetPeerID}"]`);
+            if (activeItem) {
+                activeItem.classList.add('active');
+            }
+
+            messagesDiv.innerHTML = '';
+            if (mode === 'room') {
+                addMessage('', 'Switched to room chat', false, true);
+                displayStoredRoomMessages();
+            } else {
+                addMessage('', `Direct messaging with ${targetPeerID.substring(0, 8)}...`, false, true);
+            }
+        }
+
+        function addPeerToList(peerID, name) {
+            if (peerID === client.peerID) return; // Don't add ourselves
+            if (document.querySelector(`[data-peer-id="${peerID}"]`)) return; // Already exists
+
+            const peerItem = document.createElement('div');
+            peerItem.className = 'peer-item';
+            peerItem.setAttribute('data-peer-id', peerID);
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'peer-name';
+            nameDiv.textContent = name || 'Peer';
+
+            const idDiv = document.createElement('div');
+            idDiv.className = 'peer-id';
+            idDiv.textContent = peerID.substring(0, 16) + '...';
+
+            peerItem.appendChild(nameDiv);
+            peerItem.appendChild(idDiv);
+
+            peerItem.addEventListener('click', () => {
+                switchToDM(peerID);
+            });
+
+            peerList.appendChild(peerItem);
+        }
+
+        function removePeerFromList(peerID) {
+            const peerItem = document.querySelector(`[data-peer-id="${peerID}"]`);
+            if (peerItem && !peerItem.classList.contains('room')) {
+                peerItem.remove();
+                peers.delete(peerID);
+
+                // If we were DMing with this peer, switch back to room
+                if (currentMode === 'dm' && currentPeerID === peerID) {
+                    updateMode('room');
+                }
+            }
+        }
+
+        function displayStoredMessages(peerID) {
+            const messages = dmMessages.get(peerID);
+            if (messages && messages.length > 0) {
+                for (const msg of messages) {
+                    addMessage(peerID, msg.text, msg.isOwn, false, true); // skipStorage = true
+                }
+            }
+        }
+
+        function displayStoredRoomMessages() {
+            if (roomMessages.length > 0) {
+                for (const msg of roomMessages) {
+                    addMessage(msg.senderPeerID, msg.text, msg.isOwn);
+                }
+            }
+        }
+
+        function switchToDM(peerID) {
+                updateMode('dm', peerID);
+                displayStoredMessages(peerID);
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            try {
+                if (currentMode === 'room') {
+                    await client.publish(ROOM_TOPIC, { text });
+                    storeRoomMessage(client.peerID, text, true);
+                    addMessage(client.peerID, text, true);
+                } else if (currentMode === 'dm' && currentPeerID) {
+                    await client.send(currentPeerID, PROTOCOL, { text });
+                    storeDMMessage(currentPeerID, text, true);
+                    addMessage(client.peerID, text, true, false, true); // skipStorage = true (already stored)
+                }
+                messageInput.value = '';
+            } catch (error) {
+                console.error('Failed to send message:', error);
+                setStatus('Failed to send message', 'error');
+            }
+        }
+
+        // Room chat button handler
+        document.querySelector('.peer-item.room').addEventListener('click', async () => {
+            updateMode('room');
+        });
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initialize
+        (async () => {
+            try {
+                await client.connect();
+                const peerID = await client.peer();
+
+                peerIDDiv.textContent = `Your Peer ID: ${peerID}`;
+                setStatus('Connected', 'connected');
+
+                // Start protocol with listener for direct messages
+                // The listener receives (peer, data) for all messages on this protocol
+                await client.start(PROTOCOL, (peer, data) => {
+                    // Always store the message
+                    storeDMMessage(peer, data.text, false);
+                    // Only display if currently viewing this DM
+                    if (currentMode === 'dm' && currentPeerID === peer) {
+                        addMessage(peer, data.text, false);
+                    }
+                });
+
+                // Subscribe to room chat
+                await client.subscribe(ROOM_TOPIC, (senderPeerID, data) => {
+                    if (senderPeerID !== client.peerID) {
+                        // Always store room messages
+                        storeRoomMessage(senderPeerID, data.text, false);
+                        // Only display if currently in room mode
+                        if (currentMode === 'room') {
+                            addMessage(senderPeerID, data.text, false);
+                        }
+                    }
+                });
+
+                // Function to refresh peer list using listPeers
+                const refreshPeerList = async () => {
+                    try {
+                        const peerIDs = await client.listPeers(ROOM_TOPIC);
+                        // Remove peers that are no longer in the list
+                        for (const [existingPeerID] of peers) {
+                            if (!peerIDs.includes(existingPeerID)) {
+                                removePeerFromList(existingPeerID);
+                            }
+                        }
+                        // Add new peers
+                        for (const peerID of peerIDs) {
+                            if (peerID !== client.peerID) {
+                                addPeerToList(peerID, `Peer ${peerID.substring(0, 8)}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to refresh peer list:', error);
+                    }
+                };
+
+                // Initial peer list refresh
+                await refreshPeerList();
+
+                // Refresh peer list every 5 seconds
+                setInterval(refreshPeerList, 5000);
+
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+
+                addMessage('', 'Welcome to the P2P chatroom! Your messages are distributed peer-to-peer.', false, true);
+            } catch (error) {
+                console.error('Initialization error:', error);
+                setStatus('Failed to connect', 'error');
+            }
+        })();
+    </script>
+</body>
+</html>
