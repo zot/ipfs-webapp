@@ -20,7 +20,7 @@ ipfs-webapp proxies opinionated IPFS and libp2p operations for managed peers, pr
 
 ### Prerequisites
 
-- Go 1.21 or higher
+- (to build) Go 1.25 or higher -- or download release binary
 - Modern web browser
 
 ### Building from Source
@@ -55,11 +55,15 @@ Serve a peer-to-peer application from the current directory.
 
 **Usage:**
 ```bash
-./ipfs-webapp serve [--noopen]
+./ipfs-webapp serve [--noopen] [-v | -vv | -vvv]
 ```
 
 **Flags:**
 - `--noopen`: Do not open browser automatically
+- `-v, --verbose`: Verbose output (can be specified multiple times)
+  - `-v`: Log peer creation, connections, and messages
+  - `-vv`: Additional debug information
+  - `-vvv`: Maximum verbosity
 
 This will:
 1. Initialize an IPFS node with persistent peer ID
@@ -78,11 +82,15 @@ Run the built-in chatroom demo application.
 ```bash
 mkdir demo-test
 cd demo-test
-../ipfs-webapp demo [--noopen]
+../ipfs-webapp demo [--noopen] [-v | -vv | -vvv]
 ```
 
 **Flags:**
 - `--noopen`: Do not open browser automatically
+- `-v, --verbose`: Verbose output (can be specified multiple times)
+  - `-v`: Log peer creation, connections, and messages
+  - `-vv`: Additional debug information
+  - `-vvv`: Maximum verbosity
 
 This extracts the demo chatroom application and runs it.
 
