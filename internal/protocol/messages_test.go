@@ -42,7 +42,7 @@ func TestMessageSerialization(t *testing.T) {
 			message: Message{
 				RequestID:  4,
 				Method:     "peer",
-				Params:     json.RawMessage(`{"peerid":"test-id"}`),
+				Params:     json.RawMessage(`{"peerkey":"test-key"}`),
 				IsResponse: false,
 			},
 		},
@@ -80,7 +80,7 @@ func TestMessageSerialization(t *testing.T) {
 
 func TestPeerRequestSerialization(t *testing.T) {
 	req := PeerRequest{
-		PeerID: "test-peer-123",
+		PeerKey: "test-peer-key-123",
 	}
 
 	data, err := json.Marshal(req)
@@ -93,8 +93,8 @@ func TestPeerRequestSerialization(t *testing.T) {
 		t.Fatalf("Failed to unmarshal PeerRequest: %v", err)
 	}
 
-	if decoded.PeerID != req.PeerID {
-		t.Errorf("PeerID mismatch: got %s, want %s", decoded.PeerID, req.PeerID)
+	if decoded.PeerKey != req.PeerKey {
+		t.Errorf("PeerKey mismatch: got %s, want %s", decoded.PeerKey, req.PeerKey)
 	}
 }
 

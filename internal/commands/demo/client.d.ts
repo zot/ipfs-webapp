@@ -2,6 +2,7 @@ import { ProtocolDataCallback, TopicDataCallback } from './types.js';
 export declare class IPFSWebAppClient {
     private ws;
     private _peerID;
+    private _peerKey;
     private requestID;
     private pending;
     private protocolListeners;
@@ -18,8 +19,9 @@ export declare class IPFSWebAppClient {
     close(): void;
     /**
      * Initialize or retrieve peer ID
+     * Returns an array [peerID, peerKey]
      */
-    peer(peerID?: string): Promise<string>;
+    peer(peerKey?: string): Promise<[string, string]>;
     /**
      * Start a protocol with a data listener (required before sending)
      * The listener receives (peer, data) for all messages on this protocol
@@ -53,6 +55,10 @@ export declare class IPFSWebAppClient {
      * Get the current peer ID
      */
     get peerID(): string | null;
+    /**
+     * Get the current peer key
+     */
+    get peerKey(): string | null;
     private getDefaultWSUrl;
     private handleMessage;
     private processMessageQueue;

@@ -13,8 +13,12 @@ export interface ErrorResponse {
 export interface StringResponse {
     value: string;
 }
+export interface PeerResponse {
+    peerid: string;
+    peerkey: string;
+}
 export interface PeerRequest {
-    peerid?: string;
+    peerkey?: string;
 }
 export interface StartRequest {
     protocol: string;

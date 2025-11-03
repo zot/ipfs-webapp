@@ -150,24 +150,37 @@ func (g *allowPrivateGater) InterceptUpgraded(c network.Conn) (allow bool, reaso
 }
 
 // CreatePeer creates a new peer with its own libp2p host
-func (m *Manager) CreatePeer(requestedPeerID string) (string, error) {
+func (m *Manager) CreatePeer(requestedPeerKey string) (peerID string, peerKey string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Generate or parse peer identity
 	var priv crypto.PrivKey
-	var err error
 
-	if requestedPeerID != "" {
-		// For now, ignore requested peer ID and create a fresh one
-		// TODO: Support loading existing peer identities
+	if requestedPeerKey != "" {
+		// Decode and unmarshal the private key
+		keyBytes, err := crypto.ConfigDecodeKey(requestedPeerKey)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to decode peer key: %w", err)
+		}
+		priv, err = crypto.UnmarshalPrivateKey(keyBytes)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to unmarshal peer key: %w", err)
+		}
+	} else {
+		// Generate new identity
+		priv, _, err = crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to generate key pair: %w", err)
+		}
 	}
 
-	// Generate new identity
-	priv, _, err = crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
+	// Marshal and encode the private key for return
+	keyBytes, err := crypto.MarshalPrivateKey(priv)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate key pair: %w", err)
+		return "", "", fmt.Errorf("failed to marshal private key: %w", err)
 	}
+	encodedKey := crypto.ConfigEncodeKey(keyBytes)
 
 	// Create libp2p host
 	h, err := libp2p.New(
@@ -178,14 +191,14 @@ func (m *Manager) CreatePeer(requestedPeerID string) (string, error) {
 		libp2p.NATPortMap(),                             // Allow NAT traversal
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create host: %w", err)
+		return "", "", fmt.Errorf("failed to create host: %w", err)
 	}
 
 	// Create pubsub
 	ps, err := pubsub.NewGossipSub(m.ctx, h)
 	if err != nil {
 		h.Close()
-		return "", fmt.Errorf("failed to create pubsub: %w", err)
+		return "", "", fmt.Errorf("failed to create pubsub: %w", err)
 	}
 
 	// Create peer
@@ -227,7 +240,7 @@ func (m *Manager) CreatePeer(requestedPeerID string) (string, error) {
 		fmt.Printf("[%s] Created peer\n", p.alias)
 	}
 
-	return p.peerID.String(), nil
+	return p.peerID.String(), encodedKey, nil
 }
 
 // getPeer retrieves a peer by ID

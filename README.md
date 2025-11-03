@@ -131,7 +131,7 @@ const client = new IPFSWebAppClient();
 await client.connect();
 
 // Initialize peer
-const peerID = await client.peer();
+const [peerID, peerKey] = await client.peer();
 console.log('Peer ID:', peerID);
 
 // Start protocol with listener for direct messages
@@ -166,13 +166,17 @@ await client.publish('my-topic', { message: 'Hello, P2P!' });
 
 #### Peer Operations
 
-**`peer(peerID?: string): Promise<string>`**
-- Initialize peer with optional existing peer ID
-- Returns peer ID
+**`peer(peerKey?: string): Promise<[string, string]>`**
+- Initialize peer with optional existing peer key
+- Returns `[peerID, peerKey]` tuple
 - Must be called first before other operations
+- Can only be called once per connection
 
-**`getPeerID(): string | null`**
+**`get peerID(): string | null`**
 - Get current peer ID
+
+**`get peerKey(): string | null`**
+- Get current peer key
 
 #### Protocol Streams
 
@@ -194,7 +198,7 @@ await client.publish('my-topic', { message: 'Hello, P2P!' });
 
 #### Pub/Sub
 
-**`subscribe(topic: string, onData: (peerID: string, data: any) => void): Promise<void>`**
+**`subscribe(topic: string, onData: (peerID: string, data: any) => void | Promise<void>): Promise<void>`**
 - Subscribe to topic
 - `onData` callback receives sender peer ID and data
 - Listener auto-removed on unsubscribe or disconnect
@@ -204,6 +208,9 @@ await client.publish('my-topic', { message: 'Hello, P2P!' });
 
 **`unsubscribe(topic: string): Promise<void>`**
 - Unsubscribe from topic
+
+**`listPeers(topic: string): Promise<string[]>`**
+- Get list of peer IDs subscribed to a topic
 
 **Note**: All callbacks support both synchronous and asynchronous (Promise-returning) functions.
 
@@ -231,7 +238,7 @@ All messages are JSON with the following structure:
 
 | Method | Parameters | Response | Description |
 |--------|-----------|----------|-------------|
-| `peer` | `peerid?: string` | `string` (peer ID) | Initialize peer |
+| `peer` | `peerkey?: string` | `{peerid: string, peerkey: string}` | Initialize peer (required first, once only) |
 | `start` | `protocol: string` | `null` | Start protocol (required before sending) |
 | `stop` | `protocol: string` | `null` | Stop protocol |
 | `send` | `peer: string, protocol: string, data: any` | `null` | Send data to peer on protocol |
@@ -342,7 +349,7 @@ ipfs-webapp/
     async function init() {
       // Connect and initialize peer
       await client.connect();
-      const peerID = await client.peer();
+      const [peerID, peerKey] = await client.peer();
       console.log('My Peer ID:', peerID);
 
       // Subscribe to chat topic

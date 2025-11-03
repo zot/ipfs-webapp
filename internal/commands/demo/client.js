@@ -2,6 +2,7 @@ export class IPFSWebAppClient {
     constructor() {
         this.ws = null;
         this._peerID = null;
+        this._peerKey = null;
         this.requestID = 0;
         this.pending = new Map();
         this.protocolListeners = new Map(); // key: protocol
@@ -34,12 +35,14 @@ export class IPFSWebAppClient {
     }
     /**
      * Initialize or retrieve peer ID
+     * Returns an array [peerID, peerKey]
      */
-    async peer(peerID) {
-        const result = await this.sendRequest('peer', peerID ? { peerid: peerID } : {});
+    async peer(peerKey) {
+        const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
         const response = result;
-        this._peerID = response.value;
-        return this._peerID;
+        this._peerID = response.peerid;
+        this._peerKey = response.peerkey;
+        return [this._peerID, this._peerKey];
     }
     /**
      * Start a protocol with a data listener (required before sending)
@@ -104,6 +107,12 @@ export class IPFSWebAppClient {
      */
     get peerID() {
         return this._peerID;
+    }
+    /**
+     * Get the current peer key
+     */
+    get peerKey() {
+        return this._peerKey;
     }
     // Private methods
     getDefaultWSUrl() {

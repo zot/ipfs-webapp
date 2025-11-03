@@ -467,7 +467,7 @@
         (async () => {
             try {
                 await client.connect();
-                const peerID = await client.peer();
+                const [peerID, peerKey] = await client.peer();
 
                 peerIDDiv.textContent = `Your Peer ID: ${peerID}`;
                 setStatus('Connected', 'connected');

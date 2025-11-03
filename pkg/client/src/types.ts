@@ -18,10 +18,15 @@ export interface StringResponse {
   value: string;
 }
 
+export interface PeerResponse {
+  peerid: string;
+  peerkey: string;
+}
+
 // Client request message types
 
 export interface PeerRequest {
-  peerid?: string;
+  peerkey?: string;
 }
 
 export interface StartRequest {

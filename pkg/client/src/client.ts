@@ -1,6 +1,7 @@
 import {
   Message,
   StringResponse,
+  PeerResponse,
   ListPeersResponse,
   ProtocolDataCallback,
   TopicDataCallback,
@@ -16,6 +17,7 @@ interface PendingRequest {
 export class IPFSWebAppClient {
   private ws: WebSocket | null = null;
   private _peerID: string | null = null;
+  private _peerKey: string | null = null;
   private requestID: number = 0;
   private pending: Map<number, PendingRequest> = new Map();
   private protocolListeners: Map<string, ProtocolDataCallback> = new Map(); // key: protocol
@@ -53,12 +55,14 @@ export class IPFSWebAppClient {
 
   /**
    * Initialize or retrieve peer ID
+   * Returns an array [peerID, peerKey]
    */
-  async peer(peerID?: string): Promise<string> {
-    const result = await this.sendRequest('peer', peerID ? { peerid: peerID } : {});
-    const response = result as StringResponse;
-    this._peerID = response.value;
-    return this._peerID;
+  async peer(peerKey?: string): Promise<[string, string]> {
+    const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
+    const response = result as PeerResponse;
+    this._peerID = response.peerid;
+    this._peerKey = response.peerkey;
+    return [this._peerID, this._peerKey];
   }
 
   /**
@@ -131,6 +135,13 @@ export class IPFSWebAppClient {
    */
   get peerID(): string | null {
     return this._peerID;
+  }
+
+  /**
+   * Get the current peer key
+   */
+  get peerKey(): string | null {
+    return this._peerKey;
   }
 
   // Private methods

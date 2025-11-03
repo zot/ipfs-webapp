@@ -16,7 +16,7 @@ type Handler struct {
 
 // PeerManager interface for peer operations (Dependency Inversion)
 type PeerManager interface {
-	CreatePeer(peerID string) (string, error)
+	CreatePeer(requestedPeerKey string) (peerID string, peerKey string, err error)
 	RemovePeer(peerID string) error
 	Start(peerID, protocol string) error
 	Stop(peerID, protocol string) error
@@ -69,12 +69,12 @@ func (h *Handler) handlePeer(msg *Message) (*Message, error) {
 		}
 	}
 
-	peerID, err := h.peerManager.CreatePeer(req.PeerID)
+	peerID, peerKey, err := h.peerManager.CreatePeer(req.PeerKey)
 	if err != nil {
 		return h.errorResponse(msg.RequestID, 500, err.Error())
 	}
 
-	return h.stringResponse(msg.RequestID, peerID)
+	return h.peerResponse(msg.RequestID, peerID, peerKey)
 }
 
 func (h *Handler) handleStart(msg *Message, peerID string) (*Message, error) {
@@ -225,6 +225,16 @@ func (h *Handler) emptyResponse(requestID int) (*Message, error) {
 
 func (h *Handler) stringResponse(requestID int, value string) (*Message, error) {
 	resp := StringResponse{Value: value}
+	result, _ := json.Marshal(resp)
+	return &Message{
+		RequestID:  requestID,
+		IsResponse: true,
+		Result:     result,
+	}, nil
+}
+
+func (h *Handler) peerResponse(requestID int, peerID, peerKey string) (*Message, error) {
+	resp := PeerResponse{PeerID: peerID, PeerKey: peerKey}
 	result, _ := json.Marshal(resp)
 	return &Message{
 		RequestID:  requestID,

@@ -144,16 +144,16 @@ func (ws *WSConnection) readPump() {
 
 		// Special handling for "peer" command - set peer ID on first call
 		if msg.Method == "peer" && response.Error == nil {
-			var resp protocol.StringResponse
+			var resp protocol.PeerResponse
 			if err := json.Unmarshal(response.Result, &resp); err == nil {
 				ws.mu.Lock()
-				ws.peerID = resp.Value
+				ws.peerID = resp.PeerID
 				ws.peerCreated = true
 				ws.mu.Unlock()
 
 				// Register peer with server
 				if ws.server != nil {
-					ws.server.RegisterPeer(resp.Value, ws)
+					ws.server.RegisterPeer(resp.PeerID, ws)
 				}
 			}
 		}

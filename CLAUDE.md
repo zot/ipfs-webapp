@@ -21,6 +21,24 @@ make build      # or just: make
 make clean
 ```
 
+## 🧪 Testing with Playwright
+When testing with Playwright MCP:
+1. **Always use an empty tmp directory** for the demo command
+   ```bash
+   cd /tmp/ipfs-demo-test && rm -rf * && /path/to/ipfs-webapp demo --noopen -v
+   ```
+2. **Track and kill processes properly**
+   - **IMPORTANT**: DO NOT use `ps aux | grep ipfs-webapp` to find the PID!
+     - This grep pattern will match BOTH the ipfs-webapp binary AND the Claude process
+     - The Claude process command line contains the working directory path which includes "ipfs-webapp"
+     - Using this pattern with kill will accidentally kill Claude too!
+   - **Safe alternatives**:
+     - Use `pgrep -f "ipfs-webapp demo"` to find only the actual binary
+     - Use `pgrep ipfs-webapp` to find by process name only
+     - Capture the PID when starting: `./ipfs-webapp demo --noopen -v & echo $!`
+   - Kill and verify: `kill <PID> && sleep 1 && ps -p <PID>`
+   - The `demo` command requires an empty directory or it will fail
+
 The build process:
 1. Checks and installs TypeScript dependencies if `node_modules` is missing
 2. Compiles the TypeScript client library (`pkg/client/src/`) to ES modules
@@ -100,12 +118,12 @@ The build process:
 
 ## Client Request messages
 
-### Peer(peerid?)
-- Create a new peer for this websocket connection with peerid. If none given, use a fresh peerid.
+### Peer(peerkey?)
+- Create a new peer for this websocket connection with peerkey. If none given, use a fresh peerkey.
 - Must be the first command from the browser for a websocket connection
 - Cannot be sent more than once
 - on the server, the new peer is associated with this WebSocket connection
-#### Response: peerid or error
+#### Response: [peerid, peerkey] or error
 
 ### start(protocol)
 - Start a protocol and register to receive messages

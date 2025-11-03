@@ -22,6 +22,12 @@ type StringResponse struct {
 	Value string `json:"value"`
 }
 
+// PeerResponse is used for the Peer command, returning [peerid, peerkey]
+type PeerResponse struct {
+	PeerID  string `json:"peerid"`
+	PeerKey string `json:"peerkey"`
+}
+
 // ErrorResponse provides standardized error structure
 type ErrorResponse struct {
 	Code    int    `json:"code"`
@@ -32,7 +38,7 @@ type ErrorResponse struct {
 
 // PeerRequest creates or restores a peer
 type PeerRequest struct {
-	PeerID string `json:"peerid,omitempty"`
+	PeerKey string `json:"peerkey,omitempty"`
 }
 
 // StartRequest starts listening for a protocol
