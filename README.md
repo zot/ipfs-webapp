@@ -99,6 +99,69 @@ cd demo-test
 
 This extracts the demo chatroom application and runs it.
 
+### `ls`
+
+List files available in the embedded demo directory.
+
+**Usage:**
+```bash
+./ipfs-webapp ls
+```
+
+**Description:**
+- Shows all files available in the embedded demo directory
+- Displays file names that can be copied with the `cp` command
+- Files are listed in alphabetical order
+- Useful for discovering what files are available before using `cp`
+
+**Example Output:**
+```
+Files available in embedded demo directory (7):
+
+client.d.ts
+client.js
+index.html
+index.js
+ipfs-webapp-client.js
+types.d.ts
+types.js
+```
+
+### `cp`
+
+Copy files from the embedded demo directory to a target location.
+
+**Usage:**
+```bash
+./ipfs-webapp cp SOURCE... DEST
+```
+
+**Arguments:**
+- `SOURCE...`: One or more glob patterns or file names from the embedded demo directory
+- `DEST`: Destination directory (will be created if it doesn't exist)
+
+**Examples:**
+```bash
+# Copy client library files
+./ipfs-webapp cp client.js my-project/
+./ipfs-webapp cp client.* my-project/         # copies client.js and client.d.ts
+
+# Copy multiple file types
+./ipfs-webapp cp *.js *.html my-project/
+
+# Extract specific demo files
+./ipfs-webapp cp index.html style.css my-app/html/
+```
+
+**Behavior:**
+- Supports glob patterns (e.g., `*.js`, `client.*`) for flexible file selection
+- Creates destination directory if it doesn't exist
+- Preserves original file names (no renaming)
+- Validates that at least one file matches the patterns
+- Fails if no files match or if destination is not a directory when copying multiple files
+
+**Note**: This command is particularly useful for extracting the TypeScript client library (`client.js`, `client.d.ts`) from the embedded demo files for use in your own projects.
+
 ### `version`
 
 Display version information:

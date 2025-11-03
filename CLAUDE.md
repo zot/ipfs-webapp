@@ -118,6 +118,29 @@ The build process:
         - server transparently manages all stream lifecycle and reliability
   - version
     displays the current version
+  - ls
+    - lists files available in the embedded demo directory
+    - shows files that can be copied with the cp command
+    - usage: `./ipfs-webapp ls`
+    - displays file names in a clean list format
+    - useful for discovering what files are available before using cp
+  - cp
+    - copies files from the embedded demo directory to a target location
+    - supports glob patterns for source selection (e.g., `*.js`, `client.*`)
+    - similar to UNIX cp command but operates on embedded demo files
+    - usage: `./ipfs-webapp cp SOURCE... DEST`
+      - SOURCE: one or more glob patterns or file names from the embedded demo directory
+      - DEST: destination directory (must exist or will be created)
+    - examples
+      - `./ipfs-webapp cp client.js my-project/` - copy single file
+      - `./ipfs-webapp cp client.* my-project/` - copy client.js and client.d.ts
+      - `./ipfs-webapp cp *.js *.html my-project/` - copy multiple patterns
+    - creates destination directory if it doesn't exist
+    - preserves file names (no renaming)
+    - validates that at least one file matches the patterns
+    - error handling
+      - fails if no files match the patterns
+      - fails if destination is not a directory (when copying multiple files)
 
 ## Message format
 - a request has a requestID

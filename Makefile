@@ -20,6 +20,9 @@ client: deps
 	mkdir -p internal/commands/demo
 	cp pkg/client/dist/*.js internal/commands/demo/
 	cp pkg/client/dist/*.d.ts internal/commands/demo/
+	@echo "Cleaning temporary files from demo directory..."
+	find internal/commands/demo -name '.*' -type f -delete
+	find internal/commands/demo -name '#*' -type f -delete
 	@echo "Client library built and copied successfully"
 
 # Build Go application (depends on client)
