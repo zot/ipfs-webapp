@@ -46,6 +46,8 @@ func NewServer(ctx context.Context, pm *peer.Manager, htmlDir string, port int) 
 	pm.SetCallbacks(
 		s.onPeerData,
 		s.onTopicData,
+		s.onTopicJoined,
+		s.onTopicLeft,
 	)
 
 	return s
@@ -266,6 +268,36 @@ func (s *Server) onTopicData(receiverPeerID, topic, senderPeerID string, data an
 	if exists {
 		if err := conn.SendMessage(msg); err != nil {
 			fmt.Printf("Failed to send topic message to peer %s: %v\n", receiverPeerID, err)
+		}
+	}
+}
+
+func (s *Server) onTopicJoined(receiverPeerID, topic, joinedPeerID string) {
+	msg := s.handler.CreateJoinedMessage(topic, joinedPeerID)
+
+	// Send only to the connection that owns the receiving peer
+	s.mu.RLock()
+	conn, exists := s.peerConnection[receiverPeerID]
+	s.mu.RUnlock()
+
+	if exists {
+		if err := conn.SendMessage(msg); err != nil {
+			fmt.Printf("Failed to send joined message to peer %s: %v\n", receiverPeerID, err)
+		}
+	}
+}
+
+func (s *Server) onTopicLeft(receiverPeerID, topic, leftPeerID string) {
+	msg := s.handler.CreateLeftMessage(topic, leftPeerID)
+
+	// Send only to the connection that owns the receiving peer
+	s.mu.RLock()
+	conn, exists := s.peerConnection[receiverPeerID]
+	s.mu.RUnlock()
+
+	if exists {
+		if err := conn.SendMessage(msg); err != nil {
+			fmt.Printf("Failed to send left message to peer %s: %v\n", receiverPeerID, err)
 		}
 	}
 }

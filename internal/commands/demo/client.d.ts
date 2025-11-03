@@ -1,4 +1,4 @@
-import { ProtocolDataCallback, TopicDataCallback } from './types.js';
+import { ProtocolDataCallback, TopicDataCallback, TopicJoinedCallback, TopicLeftCallback } from './types.js';
 export declare class IPFSWebAppClient {
     private ws;
     private _peerID;
@@ -7,6 +7,8 @@ export declare class IPFSWebAppClient {
     private pending;
     private protocolListeners;
     private topicListeners;
+    private topicJoinedListeners;
+    private topicLeftListeners;
     private messageQueue;
     private processingMessage;
     /**
@@ -51,6 +53,14 @@ export declare class IPFSWebAppClient {
      * List peers subscribed to a topic
      */
     listPeers(topic: string): Promise<string[]>;
+    /**
+     * Start monitoring a topic for peer join/leave events
+     */
+    monitor(topic: string, onJoined: TopicJoinedCallback, onLeft: TopicLeftCallback): Promise<void>;
+    /**
+     * Stop monitoring a topic for peer join/leave events
+     */
+    stopMonitor(topic: string): Promise<void>;
     /**
      * Get the current peer ID
      */

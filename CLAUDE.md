@@ -189,6 +189,16 @@ The build process:
 - Get list of peers subscribed to a topic
 #### Response: array of peer IDs or error
 
+### monitor(topic: string)
+- Start monitoring a topic for peer join/leave events
+- Server will send `joined` and `left` notifications for this topic
+#### Response: null or error
+
+### stopMonitor(topic: string)
+- Stop monitoring a topic for peer join/leave events
+- No more `joined` or `left` notifications will be sent for this topic
+#### Response: null or error
+
 ## Server Request messages
 
 ### peerData(peer, protocol, data: any)
@@ -198,6 +208,16 @@ The build process:
 #### Response: null or error
 
 ### topicData(topic, peerId, data: any)
+#### Response: null or error
+
+### joined(topic: string, peerId: string)
+- Notifies client that a peer joined a monitored topic
+- Only sent for topics being actively monitored via `monitor(topic)`
+#### Response: null or error
+
+### left(topic: string, peerId: string)
+- Notifies client that a peer left a monitored topic
+- Only sent for topics being actively monitored via `monitor(topic)`
 #### Response: null or error
 
 ## Implementation Details

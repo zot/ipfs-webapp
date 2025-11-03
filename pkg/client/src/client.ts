@@ -5,8 +5,12 @@ import {
   ListPeersResponse,
   ProtocolDataCallback,
   TopicDataCallback,
+  TopicJoinedCallback,
+  TopicLeftCallback,
   PeerDataRequest,
   TopicDataRequest,
+  JoinedRequest,
+  LeftRequest,
 } from './types.js';
 
 interface PendingRequest {
@@ -22,6 +26,8 @@ export class IPFSWebAppClient {
   private pending: Map<number, PendingRequest> = new Map();
   private protocolListeners: Map<string, ProtocolDataCallback> = new Map(); // key: protocol
   private topicListeners: Map<string, TopicDataCallback> = new Map();
+  private topicJoinedListeners: Map<string, TopicJoinedCallback> = new Map(); // key: topic
+  private topicLeftListeners: Map<string, TopicLeftCallback> = new Map(); // key: topic
 
   // Message queuing for sequential processing
   private messageQueue: Message[] = [];
@@ -131,6 +137,30 @@ export class IPFSWebAppClient {
   }
 
   /**
+   * Start monitoring a topic for peer join/leave events
+   */
+  async monitor(topic: string, onJoined: TopicJoinedCallback, onLeft: TopicLeftCallback): Promise<void> {
+    if (this.topicJoinedListeners.has(topic)) {
+      throw new Error(`Topic '${topic}' is already being monitored`);
+    }
+    await this.sendRequest('monitor', { topic });
+    this.topicJoinedListeners.set(topic, onJoined);
+    this.topicLeftListeners.set(topic, onLeft);
+  }
+
+  /**
+   * Stop monitoring a topic for peer join/leave events
+   */
+  async stopMonitor(topic: string): Promise<void> {
+    if (!this.topicJoinedListeners.has(topic)) {
+      throw new Error(`Topic '${topic}' is not being monitored`);
+    }
+    await this.sendRequest('stopmonitor', { topic });
+    this.topicJoinedListeners.delete(topic);
+    this.topicLeftListeners.delete(topic);
+  }
+
+  /**
    * Get the current peer ID
    */
   get peerID(): string | null {
@@ -222,7 +252,39 @@ export class IPFSWebAppClient {
           const req = msg.params as TopicDataRequest;
           const listener = this.topicListeners.get(req.topic);
           if (listener) {
-            listener(req.peerid, req.data);
+            try {
+              await listener(req.peerid, req.data);
+            } catch (error) {
+              console.error('Error in topicData listener:', error);
+            }
+          }
+        }
+        break;
+
+      case 'joined':
+        if (msg.params) {
+          const req = msg.params as JoinedRequest;
+          const listener = this.topicJoinedListeners.get(req.topic);
+          if (listener) {
+            try {
+              await listener(req.peerid);
+            } catch (error) {
+              console.error('Error in joined listener:', error);
+            }
+          }
+        }
+        break;
+
+      case 'left':
+        if (msg.params) {
+          const req = msg.params as LeftRequest;
+          const listener = this.topicLeftListeners.get(req.topic);
+          if (listener) {
+            try {
+              await listener(req.peerid);
+            } catch (error) {
+              console.error('Error in left listener:', error);
+            }
           }
         }
         break;
@@ -233,6 +295,8 @@ export class IPFSWebAppClient {
     // Clean up all listeners on disconnect
     this.protocolListeners.clear();
     this.topicListeners.clear();
+    this.topicJoinedListeners.clear();
+    this.topicLeftListeners.clear();
     this.messageQueue.length = 0;
     this.processingMessage = false;
   }

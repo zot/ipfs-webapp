@@ -64,6 +64,14 @@ export interface ListPeersResponse {
   peers: string[];
 }
 
+export interface MonitorRequest {
+  topic: string;
+}
+
+export interface StopMonitorRequest {
+  topic: string;
+}
+
 // Server request message types
 
 export interface PeerDataRequest {
@@ -78,8 +86,20 @@ export interface TopicDataRequest {
   data: any;
 }
 
+export interface JoinedRequest {
+  topic: string;
+  peerid: string;
+}
+
+export interface LeftRequest {
+  topic: string;
+  peerid: string;
+}
+
 // Callback types
 
 // Callbacks can be sync or async for flexibility
 export type ProtocolDataCallback = (peer: string, data: any) => void | Promise<void>;
 export type TopicDataCallback = (peerID: string, data: any) => void | Promise<void>;
+export type TopicJoinedCallback = (peerID: string) => void | Promise<void>;
+export type TopicLeftCallback = (peerID: string) => void | Promise<void>;

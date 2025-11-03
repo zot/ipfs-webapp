@@ -25,6 +25,8 @@ type PeerManager interface {
 	Publish(peerID, topic string, data any) error
 	Unsubscribe(peerID, topic string) error
 	ListPeers(peerID, topic string) ([]string, error)
+	Monitor(peerID, topic string) error
+	StopMonitor(peerID, topic string) error
 }
 
 // NewHandler creates a new protocol handler
@@ -54,6 +56,10 @@ func (h *Handler) HandleClientMessage(msg *Message, peerID string) (*Message, er
 		return h.handleUnsubscribe(msg, peerID)
 	case "listpeers":
 		return h.handleListPeers(msg, peerID)
+	case "monitor":
+		return h.handleMonitor(msg, peerID)
+	case "stopmonitor":
+		return h.handleStopMonitor(msg, peerID)
 	default:
 		return h.errorResponse(msg.RequestID, 400, fmt.Sprintf("unknown method: %s", msg.Method))
 	}
@@ -175,6 +181,32 @@ func (h *Handler) handleListPeers(msg *Message, peerID string) (*Message, error)
 	}, nil
 }
 
+func (h *Handler) handleMonitor(msg *Message, peerID string) (*Message, error) {
+	var req MonitorRequest
+	if err := json.Unmarshal(msg.Params, &req); err != nil {
+		return h.errorResponse(msg.RequestID, 400, "invalid params")
+	}
+
+	if err := h.peerManager.Monitor(peerID, req.Topic); err != nil {
+		return h.errorResponse(msg.RequestID, 500, err.Error())
+	}
+
+	return h.emptyResponse(msg.RequestID)
+}
+
+func (h *Handler) handleStopMonitor(msg *Message, peerID string) (*Message, error) {
+	var req StopMonitorRequest
+	if err := json.Unmarshal(msg.Params, &req); err != nil {
+		return h.errorResponse(msg.RequestID, 400, "invalid params")
+	}
+
+	if err := h.peerManager.StopMonitor(peerID, req.Topic); err != nil {
+		return h.errorResponse(msg.RequestID, 500, err.Error())
+	}
+
+	return h.emptyResponse(msg.RequestID)
+}
+
 // Server message senders (to be called by peer manager)
 
 func (h *Handler) NextRequestID() int {
@@ -209,6 +241,32 @@ func (h *Handler) CreateTopicDataMessage(topic, peerID string, data any) *Messag
 	return &Message{
 		RequestID: h.NextRequestID(),
 		Method:    "topicData",
+		Params:    params,
+	}
+}
+
+func (h *Handler) CreateJoinedMessage(topic, peerID string) *Message {
+	req := JoinedRequest{
+		Topic:  topic,
+		PeerID: peerID,
+	}
+	params, _ := json.Marshal(req)
+	return &Message{
+		RequestID: h.NextRequestID(),
+		Method:    "joined",
+		Params:    params,
+	}
+}
+
+func (h *Handler) CreateLeftMessage(topic, peerID string) *Message {
+	req := LeftRequest{
+		Topic:  topic,
+		PeerID: peerID,
+	}
+	params, _ := json.Marshal(req)
+	return &Message{
+		RequestID: h.NextRequestID(),
+		Method:    "left",
 		Params:    params,
 	}
 }

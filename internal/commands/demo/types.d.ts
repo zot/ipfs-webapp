@@ -47,6 +47,12 @@ export interface ListPeersRequest {
 export interface ListPeersResponse {
     peers: string[];
 }
+export interface MonitorRequest {
+    topic: string;
+}
+export interface StopMonitorRequest {
+    topic: string;
+}
 export interface PeerDataRequest {
     peer: string;
     protocol: string;
@@ -57,5 +63,15 @@ export interface TopicDataRequest {
     peerid: string;
     data: any;
 }
+export interface JoinedRequest {
+    topic: string;
+    peerid: string;
+}
+export interface LeftRequest {
+    topic: string;
+    peerid: string;
+}
 export type ProtocolDataCallback = (peer: string, data: any) => void | Promise<void>;
 export type TopicDataCallback = (peerID: string, data: any) => void | Promise<void>;
+export type TopicJoinedCallback = (peerID: string) => void | Promise<void>;
+export type TopicLeftCallback = (peerID: string) => void | Promise<void>;

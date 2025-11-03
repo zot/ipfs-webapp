@@ -84,6 +84,16 @@ type ListPeersResponse struct {
 	Peers []string `json:"peers"`
 }
 
+// MonitorRequest starts monitoring a topic for peer join/leave events
+type MonitorRequest struct {
+	Topic string `json:"topic"`
+}
+
+// StopMonitorRequest stops monitoring a topic for peer join/leave events
+type StopMonitorRequest struct {
+	Topic string `json:"topic"`
+}
+
 // Server Request Messages (sent from server to client)
 
 // PeerDataRequest delivers data from a peer on a protocol
@@ -98,4 +108,16 @@ type TopicDataRequest struct {
 	Topic  string `json:"topic"`
 	PeerID string `json:"peerid"`
 	Data   any    `json:"data"`
+}
+
+// JoinedRequest notifies client that a peer joined a monitored topic
+type JoinedRequest struct {
+	Topic  string `json:"topic"`
+	PeerID string `json:"peerid"`
+}
+
+// LeftRequest notifies client that a peer left a monitored topic
+type LeftRequest struct {
+	Topic  string `json:"topic"`
+	PeerID string `json:"peerid"`
 }

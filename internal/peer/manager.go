@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -22,29 +23,40 @@ import (
 
 // Manager manages multiple peers
 type Manager struct {
-	ctx          context.Context
-	mu           sync.RWMutex
-	peers        map[string]*Peer
-	onPeerData   func(receiverPeerID, senderPeerID, protocol string, data any)
-	onTopicData  func(receiverPeerID, topic, senderPeerID string, data any)
-	peerAliases  map[string]string // peerID -> alias
-	aliasCounter int
-	verbosity    int
+	ctx            context.Context
+	mu             sync.RWMutex
+	peers          map[string]*Peer
+	onPeerData     func(receiverPeerID, senderPeerID, protocol string, data any)
+	onTopicData    func(receiverPeerID, topic, senderPeerID string, data any)
+	onTopicJoined  func(receiverPeerID, topic, joinedPeerID string)
+	onTopicLeft    func(receiverPeerID, topic, leftPeerID string)
+	peerAliases    map[string]string // peerID -> alias
+	aliasCounter   int
+	verbosity      int
 }
 
 // Peer represents a single libp2p peer with its own host and state
 type Peer struct {
+	ctx              context.Context
+	host             host.Host
+	pubsub           *pubsub.PubSub
+	peerID           peer.ID
+	alias            string
+	mu               sync.RWMutex
+	connections      map[string]*Connection // key: "peerID:protocol" (legacy, kept for compatibility)
+	protocols        map[protocol.ID]*ProtocolHandler
+	topics           map[string]*TopicHandler
+	monitoredTopics  map[string]*TopicMonitor // topics being monitored for join/leave events
+	manager          *Manager
+	vcm              *VirtualConnectionManager // Virtual connection manager for reliability
+}
+
+// TopicMonitor tracks peers in a topic and monitors join/leave events
+type TopicMonitor struct {
+	Topic       string
 	ctx         context.Context
-	host        host.Host
-	pubsub      *pubsub.PubSub
-	peerID      peer.ID
-	alias       string
-	mu          sync.RWMutex
-	connections map[string]*Connection // key: "peerID:protocol" (legacy, kept for compatibility)
-	protocols   map[protocol.ID]*ProtocolHandler
-	topics      map[string]*TopicHandler
-	manager     *Manager
-	vcm         *VirtualConnectionManager // Virtual connection manager for reliability
+	cancel      context.CancelFunc
+	knownPeers  map[string]bool // track which peers we've seen
 }
 
 // Connection represents an active peer-to-peer stream
@@ -83,9 +95,13 @@ func NewManager(ctx context.Context, bootstrapHost host.Host, verbosity int) (*M
 func (m *Manager) SetCallbacks(
 	onPeerData func(receiverPeerID, senderPeerID, protocol string, data any),
 	onTopicData func(receiverPeerID, topic, senderPeerID string, data any),
+	onTopicJoined func(receiverPeerID, topic, joinedPeerID string),
+	onTopicLeft func(receiverPeerID, topic, leftPeerID string),
 ) {
 	m.onPeerData = onPeerData
 	m.onTopicData = onTopicData
+	m.onTopicJoined = onTopicJoined
+	m.onTopicLeft = onTopicLeft
 }
 
 // LogVerbose logs a message if the level is within the verbosity threshold
@@ -203,14 +219,15 @@ func (m *Manager) CreatePeer(requestedPeerKey string) (peerID string, peerKey st
 
 	// Create peer
 	p := &Peer{
-		ctx:         m.ctx,
-		host:        h,
-		pubsub:      ps,
-		peerID:      h.ID(),
-		connections: make(map[string]*Connection),
-		protocols:   make(map[protocol.ID]*ProtocolHandler),
-		topics:      make(map[string]*TopicHandler),
-		manager:     m,
+		ctx:             m.ctx,
+		host:            h,
+		pubsub:          ps,
+		peerID:          h.ID(),
+		connections:     make(map[string]*Connection),
+		protocols:       make(map[protocol.ID]*ProtocolHandler),
+		topics:          make(map[string]*TopicHandler),
+		monitoredTopics: make(map[string]*TopicMonitor),
+		manager:         m,
 	}
 
 	// Initialize virtual connection manager
@@ -316,6 +333,24 @@ func (m *Manager) ListPeers(peerID, topic string) ([]string, error) {
 		return nil, err
 	}
 	return p.ListPeers(topic)
+}
+
+// Monitor starts monitoring a topic for peer join/leave events
+func (m *Manager) Monitor(peerID, topic string) error {
+	p, err := m.getPeer(peerID)
+	if err != nil {
+		return err
+	}
+	return p.Monitor(topic)
+}
+
+// StopMonitor stops monitoring a topic for peer join/leave events
+func (m *Manager) StopMonitor(peerID, topic string) error {
+	p, err := m.getPeer(peerID)
+	if err != nil {
+		return err
+	}
+	return p.StopMonitor(topic)
 }
 
 // RemovePeer removes a peer and cleans up its resources
@@ -477,7 +512,20 @@ func (p *Peer) Unsubscribe(topic string) error {
 }
 
 func (p *Peer) ListPeers(topic string) ([]string, error) {
-	// Use pubsub's ListPeers to get actual subscribers
+	p.mu.RLock()
+	monitor, isMonitored := p.monitoredTopics[topic]
+	p.mu.RUnlock()
+
+	// If monitoring this topic, return the monitored peer list
+	if isMonitored {
+		peerStrs := make([]string, 0, len(monitor.knownPeers))
+		for peerID := range monitor.knownPeers {
+			peerStrs = append(peerStrs, peerID)
+		}
+		return peerStrs, nil
+	}
+
+	// Otherwise, query gossipsub directly
 	peers := p.pubsub.ListPeers(topic)
 
 	// Convert peer.ID slice to string slice
@@ -487,6 +535,47 @@ func (p *Peer) ListPeers(topic string) ([]string, error) {
 	}
 
 	return peerStrs, nil
+}
+
+func (p *Peer) Monitor(topic string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// If already monitoring, return success (idempotent)
+	if _, exists := p.monitoredTopics[topic]; exists {
+		return nil
+	}
+
+	// Create monitor
+	ctx, cancel := context.WithCancel(p.ctx)
+	monitor := &TopicMonitor{
+		Topic:      topic,
+		ctx:        ctx,
+		cancel:     cancel,
+		knownPeers: make(map[string]bool),
+	}
+	p.monitoredTopics[topic] = monitor
+
+	// Start monitoring
+	go p.monitorTopic(monitor)
+
+	return nil
+}
+
+func (p *Peer) StopMonitor(topic string) error {
+	p.mu.Lock()
+	monitor, exists := p.monitoredTopics[topic]
+	if !exists {
+		p.mu.Unlock()
+		// If not monitoring, return success (idempotent)
+		return nil
+	}
+	delete(p.monitoredTopics, topic)
+	p.mu.Unlock()
+
+	monitor.cancel()
+
+	return nil
 }
 
 func (p *Peer) Close() error {
@@ -503,6 +592,12 @@ func (p *Peer) Close() error {
 		handler.PubsubTopic.Close()
 	}
 	p.topics = make(map[string]*TopicHandler)
+
+	// Close all monitors
+	for _, monitor := range p.monitoredTopics {
+		monitor.cancel()
+	}
+	p.monitoredTopics = make(map[string]*TopicMonitor)
 
 	// Close all connections (legacy)
 	for _, conn := range p.connections {
@@ -580,6 +675,46 @@ func (p *Peer) readFromTopic(handler *TopicHandler) {
 
 		if p.manager.onTopicData != nil {
 			p.manager.onTopicData(p.peerID.String(), handler.Topic, msg.GetFrom().String(), decoded)
+		}
+	}
+}
+
+func (p *Peer) monitorTopic(monitor *TopicMonitor) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-monitor.ctx.Done():
+			return
+		case <-ticker.C:
+			// Get current peers in topic
+			currentPeers := p.pubsub.ListPeers(monitor.Topic)
+
+			// Build current peer set
+			currentPeerSet := make(map[string]bool)
+			for _, pid := range currentPeers {
+				peerIDStr := pid.String()
+				currentPeerSet[peerIDStr] = true
+
+				// Check if this is a new peer (joined)
+				if !monitor.knownPeers[peerIDStr] {
+					monitor.knownPeers[peerIDStr] = true
+					if p.manager.onTopicJoined != nil {
+						p.manager.onTopicJoined(p.peerID.String(), monitor.Topic, peerIDStr)
+					}
+				}
+			}
+
+			// Check for peers that left
+			for peerIDStr := range monitor.knownPeers {
+				if !currentPeerSet[peerIDStr] {
+					delete(monitor.knownPeers, peerIDStr)
+					if p.manager.onTopicLeft != nil {
+						p.manager.onTopicLeft(p.peerID.String(), monitor.Topic, peerIDStr)
+					}
+				}
+			}
 		}
 	}
 }
