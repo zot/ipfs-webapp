@@ -12,6 +12,7 @@ type Handler struct {
 	nextReqID   int
 	mu          sync.Mutex
 	pending     map[int]chan *Message
+	onSendAck   func(peerID string, ack int) // Callback to send ack messages to WebSocket clients
 }
 
 // PeerManager interface for peer operations (Dependency Inversion)
@@ -37,6 +38,11 @@ func NewHandler(pm PeerManager) *Handler {
 	}
 }
 
+// SetAckCallback sets the callback for sending ack messages
+func (h *Handler) SetAckCallback(callback func(peerID string, ack int)) {
+	h.onSendAck = callback
+}
+
 // HandleClientMessage processes messages from the client
 func (h *Handler) HandleClientMessage(msg *Message, peerID string) (*Message, error) {
 	switch msg.Method {
@@ -56,10 +62,6 @@ func (h *Handler) HandleClientMessage(msg *Message, peerID string) (*Message, er
 		return h.handleUnsubscribe(msg, peerID)
 	case "listpeers":
 		return h.handleListPeers(msg, peerID)
-	case "monitor":
-		return h.handleMonitor(msg, peerID)
-	case "stopmonitor":
-		return h.handleStopMonitor(msg, peerID)
 	default:
 		return h.errorResponse(msg.RequestID, 400, fmt.Sprintf("unknown method: %s", msg.Method))
 	}
@@ -119,6 +121,11 @@ func (h *Handler) handleSend(msg *Message, peerID string) (*Message, error) {
 		return h.errorResponse(msg.RequestID, 500, err.Error())
 	}
 
+	// If ack was requested (>= 0), send ack message back to client
+	if req.Ack >= 0 && h.onSendAck != nil {
+		h.onSendAck(peerID, req.Ack)
+	}
+
 	return h.emptyResponse(msg.RequestID)
 }
 
@@ -129,6 +136,11 @@ func (h *Handler) handleSubscribe(msg *Message, peerID string) (*Message, error)
 	}
 
 	if err := h.peerManager.Subscribe(peerID, req.Topic); err != nil {
+		return h.errorResponse(msg.RequestID, 500, err.Error())
+	}
+
+	// Automatically start monitoring peer join/leave events
+	if err := h.peerManager.Monitor(peerID, req.Topic); err != nil {
 		return h.errorResponse(msg.RequestID, 500, err.Error())
 	}
 
@@ -158,6 +170,11 @@ func (h *Handler) handleUnsubscribe(msg *Message, peerID string) (*Message, erro
 		return h.errorResponse(msg.RequestID, 500, err.Error())
 	}
 
+	// Automatically stop monitoring peer join/leave events
+	if err := h.peerManager.StopMonitor(peerID, req.Topic); err != nil {
+		return h.errorResponse(msg.RequestID, 500, err.Error())
+	}
+
 	return h.emptyResponse(msg.RequestID)
 }
 
@@ -179,32 +196,6 @@ func (h *Handler) handleListPeers(msg *Message, peerID string) (*Message, error)
 		IsResponse: true,
 		Result:     result,
 	}, nil
-}
-
-func (h *Handler) handleMonitor(msg *Message, peerID string) (*Message, error) {
-	var req MonitorRequest
-	if err := json.Unmarshal(msg.Params, &req); err != nil {
-		return h.errorResponse(msg.RequestID, 400, "invalid params")
-	}
-
-	if err := h.peerManager.Monitor(peerID, req.Topic); err != nil {
-		return h.errorResponse(msg.RequestID, 500, err.Error())
-	}
-
-	return h.emptyResponse(msg.RequestID)
-}
-
-func (h *Handler) handleStopMonitor(msg *Message, peerID string) (*Message, error) {
-	var req StopMonitorRequest
-	if err := json.Unmarshal(msg.Params, &req); err != nil {
-		return h.errorResponse(msg.RequestID, 400, "invalid params")
-	}
-
-	if err := h.peerManager.StopMonitor(peerID, req.Topic); err != nil {
-		return h.errorResponse(msg.RequestID, 500, err.Error())
-	}
-
-	return h.emptyResponse(msg.RequestID)
 }
 
 // Server message senders (to be called by peer manager)
@@ -245,28 +236,28 @@ func (h *Handler) CreateTopicDataMessage(topic, peerID string, data any) *Messag
 	}
 }
 
-func (h *Handler) CreateJoinedMessage(topic, peerID string) *Message {
-	req := JoinedRequest{
+func (h *Handler) CreatePeerChangeMessage(topic, peerID string, joined bool) *Message {
+	req := PeerChangeRequest{
 		Topic:  topic,
 		PeerID: peerID,
+		Joined: joined,
 	}
 	params, _ := json.Marshal(req)
 	return &Message{
 		RequestID: h.NextRequestID(),
-		Method:    "joined",
+		Method:    "peerChange",
 		Params:    params,
 	}
 }
 
-func (h *Handler) CreateLeftMessage(topic, peerID string) *Message {
-	req := LeftRequest{
-		Topic:  topic,
-		PeerID: peerID,
+func (h *Handler) CreateAckMessage(ack int) *Message {
+	req := AckRequest{
+		Ack: ack,
 	}
 	params, _ := json.Marshal(req)
 	return &Message{
 		RequestID: h.NextRequestID(),
-		Method:    "left",
+		Method:    "ack",
 		Params:    params,
 	}
 }

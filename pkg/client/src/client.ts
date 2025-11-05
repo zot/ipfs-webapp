@@ -5,12 +5,12 @@ import {
   ListPeersResponse,
   ProtocolDataCallback,
   TopicDataCallback,
-  TopicJoinedCallback,
-  TopicLeftCallback,
+  PeerChangeCallback,
+  AckCallback,
   PeerDataRequest,
   TopicDataRequest,
-  JoinedRequest,
-  LeftRequest,
+  PeerChangeRequest,
+  AckRequest,
 } from './types.js';
 
 interface PendingRequest {
@@ -26,20 +26,26 @@ export class IPFSWebAppClient {
   private pending: Map<number, PendingRequest> = new Map();
   private protocolListeners: Map<string, ProtocolDataCallback> = new Map(); // key: protocol
   private topicListeners: Map<string, TopicDataCallback> = new Map();
-  private topicJoinedListeners: Map<string, TopicJoinedCallback> = new Map(); // key: topic
-  private topicLeftListeners: Map<string, TopicLeftCallback> = new Map(); // key: topic
+  private peerChangeListeners: Map<string, PeerChangeCallback> = new Map(); // key: topic
 
   // Message queuing for sequential processing
   private messageQueue: Message[] = [];
   private processingMessage: boolean = false;
 
-  /**
-   * Connect to the WebSocket server
-   */
-  async connect(url?: string): Promise<void> {
-    const wsUrl = url || this.getDefaultWSUrl();
+  // Ack tracking
+  private nextAckNumber: number = 0;
+  private ackCallbacks: Map<number, AckCallback> = new Map(); // key: ack number
 
-    return new Promise((resolve, reject) => {
+  /**
+   * Connect to the WebSocket server and initialize peer identity
+   * @param peerKey Optional peer key to restore previous identity
+   * @returns Promise resolving to [peerID, peerKey] tuple
+   */
+  async connect(peerKey?: string): Promise<[string, string]> {
+    const wsUrl = this.getDefaultWSUrl();
+
+    // First, establish WebSocket connection
+    await new Promise<void>((resolve, reject) => {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => resolve();
@@ -47,6 +53,13 @@ export class IPFSWebAppClient {
       this.ws.onmessage = (event) => this.handleMessage(event);
       this.ws.onclose = () => this.handleClose();
     });
+
+    // Then, initialize peer identity
+    const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
+    const response = result as PeerResponse;
+    this._peerID = response.peerid;
+    this._peerKey = response.peerkey;
+    return [this._peerID, this._peerKey];
   }
 
   /**
@@ -57,18 +70,6 @@ export class IPFSWebAppClient {
       this.ws.close();
       this.ws = null;
     }
-  }
-
-  /**
-   * Initialize or retrieve peer ID
-   * Returns an array [peerID, peerKey]
-   */
-  async peer(peerKey?: string): Promise<[string, string]> {
-    const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
-    const response = result as PeerResponse;
-    this._peerID = response.peerid;
-    this._peerKey = response.peerkey;
-    return [this._peerID, this._peerKey];
   }
 
   /**
@@ -96,19 +97,35 @@ export class IPFSWebAppClient {
 
   /**
    * Send data to a peer on a protocol
+   * @param peer Target peer ID
+   * @param protocol Protocol name
+   * @param data Data to send
+   * @param onAck Optional callback invoked when delivery is confirmed
    */
-  async send(peer: string, protocol: string, data: any): Promise<void> {
+  async send(peer: string, protocol: string, data: any, onAck?: AckCallback): Promise<void> {
     if (!this.protocolListeners.has(protocol)) {
       throw new Error(`Cannot send on protocol '${protocol}': protocol not started. Call start() first.`);
     }
-    await this.sendRequest('send', { peer, protocol, data });
+
+    let ackNum = -1; // Default: no ack requested
+    if (onAck) {
+      // Assign ack number and store callback
+      ackNum = this.nextAckNumber++;
+      this.ackCallbacks.set(ackNum, onAck);
+    }
+
+    await this.sendRequest('send', { peer, protocol, data, ack: ackNum });
   }
 
   /**
-   * Subscribe to a topic with data listener
+   * Subscribe to a topic with data listener and optional peer change listener
+   * Automatically monitors the topic for peer join/leave events if onPeerChange is provided
    */
-  async subscribe(topic: string, onData: TopicDataCallback): Promise<void> {
+  async subscribe(topic: string, onData: TopicDataCallback, onPeerChange?: PeerChangeCallback): Promise<void> {
     this.topicListeners.set(topic, onData);
+    if (onPeerChange) {
+      this.peerChangeListeners.set(topic, onPeerChange);
+    }
     await this.sendRequest('subscribe', { topic });
   }
 
@@ -120,10 +137,11 @@ export class IPFSWebAppClient {
   }
 
   /**
-   * Unsubscribe from a topic
+   * Unsubscribe from a topic and stop monitoring peer changes
    */
   async unsubscribe(topic: string): Promise<void> {
     this.topicListeners.delete(topic);
+    this.peerChangeListeners.delete(topic);
     await this.sendRequest('unsubscribe', { topic });
   }
 
@@ -134,30 +152,6 @@ export class IPFSWebAppClient {
     const result = await this.sendRequest('listpeers', { topic });
     const response = result as ListPeersResponse;
     return response.peers || [];
-  }
-
-  /**
-   * Start monitoring a topic for peer join/leave events
-   */
-  async monitor(topic: string, onJoined: TopicJoinedCallback, onLeft: TopicLeftCallback): Promise<void> {
-    if (this.topicJoinedListeners.has(topic)) {
-      throw new Error(`Topic '${topic}' is already being monitored`);
-    }
-    await this.sendRequest('monitor', { topic });
-    this.topicJoinedListeners.set(topic, onJoined);
-    this.topicLeftListeners.set(topic, onLeft);
-  }
-
-  /**
-   * Stop monitoring a topic for peer join/leave events
-   */
-  async stopMonitor(topic: string): Promise<void> {
-    if (!this.topicJoinedListeners.has(topic)) {
-      throw new Error(`Topic '${topic}' is not being monitored`);
-    }
-    await this.sendRequest('stopmonitor', { topic });
-    this.topicJoinedListeners.delete(topic);
-    this.topicLeftListeners.delete(topic);
   }
 
   /**
@@ -261,29 +255,30 @@ export class IPFSWebAppClient {
         }
         break;
 
-      case 'joined':
+      case 'peerChange':
         if (msg.params) {
-          const req = msg.params as JoinedRequest;
-          const listener = this.topicJoinedListeners.get(req.topic);
+          const req = msg.params as PeerChangeRequest;
+          const listener = this.peerChangeListeners.get(req.topic);
           if (listener) {
             try {
-              await listener(req.peerid);
+              await listener(req.peerid, req.joined);
             } catch (error) {
-              console.error('Error in joined listener:', error);
+              console.error('Error in peerChange listener:', error);
             }
           }
         }
         break;
 
-      case 'left':
+      case 'ack':
         if (msg.params) {
-          const req = msg.params as LeftRequest;
-          const listener = this.topicLeftListeners.get(req.topic);
-          if (listener) {
+          const req = msg.params as AckRequest;
+          const callback = this.ackCallbacks.get(req.ack);
+          if (callback) {
+            this.ackCallbacks.delete(req.ack); // Remove callback after use
             try {
-              await listener(req.peerid);
+              await callback();
             } catch (error) {
-              console.error('Error in left listener:', error);
+              console.error('Error in ack callback:', error);
             }
           }
         }
@@ -295,8 +290,8 @@ export class IPFSWebAppClient {
     // Clean up all listeners on disconnect
     this.protocolListeners.clear();
     this.topicListeners.clear();
-    this.topicJoinedListeners.clear();
-    this.topicLeftListeners.clear();
+    this.peerChangeListeners.clear();
+    this.ackCallbacks.clear();
     this.messageQueue.length = 0;
     this.processingMessage = false;
   }

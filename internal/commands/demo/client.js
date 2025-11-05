@@ -7,24 +7,35 @@ export class IPFSWebAppClient {
         this.pending = new Map();
         this.protocolListeners = new Map(); // key: protocol
         this.topicListeners = new Map();
-        this.topicJoinedListeners = new Map(); // key: topic
-        this.topicLeftListeners = new Map(); // key: topic
+        this.peerChangeListeners = new Map(); // key: topic
         // Message queuing for sequential processing
         this.messageQueue = [];
         this.processingMessage = false;
+        // Ack tracking
+        this.nextAckNumber = 0;
+        this.ackCallbacks = new Map(); // key: ack number
     }
     /**
-     * Connect to the WebSocket server
+     * Connect to the WebSocket server and initialize peer identity
+     * @param peerKey Optional peer key to restore previous identity
+     * @returns Promise resolving to [peerID, peerKey] tuple
      */
-    async connect(url) {
-        const wsUrl = url || this.getDefaultWSUrl();
-        return new Promise((resolve, reject) => {
+    async connect(peerKey) {
+        const wsUrl = this.getDefaultWSUrl();
+        // First, establish WebSocket connection
+        await new Promise((resolve, reject) => {
             this.ws = new WebSocket(wsUrl);
             this.ws.onopen = () => resolve();
             this.ws.onerror = (error) => reject(new Error('WebSocket connection failed'));
             this.ws.onmessage = (event) => this.handleMessage(event);
             this.ws.onclose = () => this.handleClose();
         });
+        // Then, initialize peer identity
+        const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
+        const response = result;
+        this._peerID = response.peerid;
+        this._peerKey = response.peerkey;
+        return [this._peerID, this._peerKey];
     }
     /**
      * Close the WebSocket connection
@@ -34,17 +45,6 @@ export class IPFSWebAppClient {
             this.ws.close();
             this.ws = null;
         }
-    }
-    /**
-     * Initialize or retrieve peer ID
-     * Returns an array [peerID, peerKey]
-     */
-    async peer(peerKey) {
-        const result = await this.sendRequest('peer', peerKey ? { peerkey: peerKey } : {});
-        const response = result;
-        this._peerID = response.peerid;
-        this._peerKey = response.peerkey;
-        return [this._peerID, this._peerKey];
     }
     /**
      * Start a protocol with a data listener (required before sending)
@@ -69,18 +69,32 @@ export class IPFSWebAppClient {
     }
     /**
      * Send data to a peer on a protocol
+     * @param peer Target peer ID
+     * @param protocol Protocol name
+     * @param data Data to send
+     * @param onAck Optional callback invoked when delivery is confirmed
      */
-    async send(peer, protocol, data) {
+    async send(peer, protocol, data, onAck) {
         if (!this.protocolListeners.has(protocol)) {
             throw new Error(`Cannot send on protocol '${protocol}': protocol not started. Call start() first.`);
         }
-        await this.sendRequest('send', { peer, protocol, data });
+        let ackNum = -1; // Default: no ack requested
+        if (onAck) {
+            // Assign ack number and store callback
+            ackNum = this.nextAckNumber++;
+            this.ackCallbacks.set(ackNum, onAck);
+        }
+        await this.sendRequest('send', { peer, protocol, data, ack: ackNum });
     }
     /**
-     * Subscribe to a topic with data listener
+     * Subscribe to a topic with data listener and optional peer change listener
+     * Automatically monitors the topic for peer join/leave events if onPeerChange is provided
      */
-    async subscribe(topic, onData) {
+    async subscribe(topic, onData, onPeerChange) {
         this.topicListeners.set(topic, onData);
+        if (onPeerChange) {
+            this.peerChangeListeners.set(topic, onPeerChange);
+        }
         await this.sendRequest('subscribe', { topic });
     }
     /**
@@ -90,10 +104,11 @@ export class IPFSWebAppClient {
         await this.sendRequest('publish', { topic, data });
     }
     /**
-     * Unsubscribe from a topic
+     * Unsubscribe from a topic and stop monitoring peer changes
      */
     async unsubscribe(topic) {
         this.topicListeners.delete(topic);
+        this.peerChangeListeners.delete(topic);
         await this.sendRequest('unsubscribe', { topic });
     }
     /**
@@ -103,28 +118,6 @@ export class IPFSWebAppClient {
         const result = await this.sendRequest('listpeers', { topic });
         const response = result;
         return response.peers || [];
-    }
-    /**
-     * Start monitoring a topic for peer join/leave events
-     */
-    async monitor(topic, onJoined, onLeft) {
-        if (this.topicJoinedListeners.has(topic)) {
-            throw new Error(`Topic '${topic}' is already being monitored`);
-        }
-        await this.sendRequest('monitor', { topic });
-        this.topicJoinedListeners.set(topic, onJoined);
-        this.topicLeftListeners.set(topic, onLeft);
-    }
-    /**
-     * Stop monitoring a topic for peer join/leave events
-     */
-    async stopMonitor(topic) {
-        if (!this.topicJoinedListeners.has(topic)) {
-            throw new Error(`Topic '${topic}' is not being monitored`);
-        }
-        await this.sendRequest('stopmonitor', { topic });
-        this.topicJoinedListeners.delete(topic);
-        this.topicLeftListeners.delete(topic);
     }
     /**
      * Get the current peer ID
@@ -223,30 +216,31 @@ export class IPFSWebAppClient {
                     }
                 }
                 break;
-            case 'joined':
+            case 'peerChange':
                 if (msg.params) {
                     const req = msg.params;
-                    const listener = this.topicJoinedListeners.get(req.topic);
+                    const listener = this.peerChangeListeners.get(req.topic);
                     if (listener) {
                         try {
-                            await listener(req.peerid);
+                            await listener(req.peerid, req.joined);
                         }
                         catch (error) {
-                            console.error('Error in joined listener:', error);
+                            console.error('Error in peerChange listener:', error);
                         }
                     }
                 }
                 break;
-            case 'left':
+            case 'ack':
                 if (msg.params) {
                     const req = msg.params;
-                    const listener = this.topicLeftListeners.get(req.topic);
-                    if (listener) {
+                    const callback = this.ackCallbacks.get(req.ack);
+                    if (callback) {
+                        this.ackCallbacks.delete(req.ack); // Remove callback after use
                         try {
-                            await listener(req.peerid);
+                            await callback();
                         }
                         catch (error) {
-                            console.error('Error in left listener:', error);
+                            console.error('Error in ack callback:', error);
                         }
                     }
                 }
@@ -257,8 +251,8 @@ export class IPFSWebAppClient {
         // Clean up all listeners on disconnect
         this.protocolListeners.clear();
         this.topicListeners.clear();
-        this.topicJoinedListeners.clear();
-        this.topicLeftListeners.clear();
+        this.peerChangeListeners.clear();
+        this.ackCallbacks.clear();
         this.messageQueue.length = 0;
         this.processingMessage = false;
     }

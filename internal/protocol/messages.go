@@ -56,6 +56,7 @@ type SendRequest struct {
 	Peer     string `json:"peer"`
 	Protocol string `json:"protocol"`
 	Data     any    `json:"data"`
+	Ack      int    `json:"ack"` // If >= 0, server sends ack message when delivered; -1 = no ack
 }
 
 // SubscribeRequest subscribes to a topic
@@ -84,16 +85,6 @@ type ListPeersResponse struct {
 	Peers []string `json:"peers"`
 }
 
-// MonitorRequest starts monitoring a topic for peer join/leave events
-type MonitorRequest struct {
-	Topic string `json:"topic"`
-}
-
-// StopMonitorRequest stops monitoring a topic for peer join/leave events
-type StopMonitorRequest struct {
-	Topic string `json:"topic"`
-}
-
 // Server Request Messages (sent from server to client)
 
 // PeerDataRequest delivers data from a peer on a protocol
@@ -110,14 +101,14 @@ type TopicDataRequest struct {
 	Data   any    `json:"data"`
 }
 
-// JoinedRequest notifies client that a peer joined a monitored topic
-type JoinedRequest struct {
+// PeerChangeRequest notifies client that a peer joined or left a subscribed topic
+type PeerChangeRequest struct {
 	Topic  string `json:"topic"`
 	PeerID string `json:"peerid"`
+	Joined bool   `json:"joined"` // true = joined, false = left
 }
 
-// LeftRequest notifies client that a peer left a monitored topic
-type LeftRequest struct {
-	Topic  string `json:"topic"`
-	PeerID string `json:"peerid"`
+// AckRequest notifies client that a message was successfully delivered
+type AckRequest struct {
+	Ack int `json:"ack"`
 }

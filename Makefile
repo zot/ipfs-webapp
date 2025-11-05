@@ -28,21 +28,26 @@ client: deps
 # Build Go application (depends on client)
 build: client
 	@echo "Building Go application..."
-	go build -o ipfs-webapp ./cmd/ipfs-webapp
-	@echo "Build complete: ./ipfs-webapp"
+	go build -o p2p-webapp-temp ./cmd/p2p-webapp
+	@echo "Preparing demo site for bundling..."
+	@bash scripts/prepare-demo.sh
+	@echo "Bundling demo site into binary..."
+	@./p2p-webapp-temp bundle build/demo-staging -o p2p-webapp
+	@rm -f p2p-webapp-temp
+	@rm -rf build/demo-staging
+	@echo "Build complete: ./p2p-webapp (with bundled demo)"
 
 # Run demo
 demo: build
-	./ipfs-webapp demo
+	./p2p-webapp serve
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf pkg/client/dist
 	rm -rf pkg/client/node_modules
-	rm -f internal/commands/demo/ipfs-webapp-client.js
-	rm -f internal/commands/demo/ipfs-webapp-client.d.ts
-	rm -f ipfs-webapp
+	rm -f p2p-webapp p2p-webapp-temp
+	rm -rf build
 	@echo "Clean complete"
 
 # Run tests

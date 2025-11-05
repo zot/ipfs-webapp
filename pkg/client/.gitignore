@@ -1,5 +1,5 @@
 # Go binary
-/ipfs-webapp
+/p2p-webapp
 
 # TypeScript build artifacts
 /pkg/client/dist/

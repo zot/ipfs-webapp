@@ -25,12 +25,11 @@ import (
 type Manager struct {
 	ctx            context.Context
 	mu             sync.RWMutex
-	peers          map[string]*Peer
-	onPeerData     func(receiverPeerID, senderPeerID, protocol string, data any)
-	onTopicData    func(receiverPeerID, topic, senderPeerID string, data any)
-	onTopicJoined  func(receiverPeerID, topic, joinedPeerID string)
-	onTopicLeft    func(receiverPeerID, topic, leftPeerID string)
-	peerAliases    map[string]string // peerID -> alias
+	peers        map[string]*Peer
+	onPeerData   func(receiverPeerID, senderPeerID, protocol string, data any)
+	onTopicData  func(receiverPeerID, topic, senderPeerID string, data any)
+	onPeerChange func(receiverPeerID, topic, changedPeerID string, joined bool)
+	peerAliases  map[string]string // peerID -> alias
 	aliasCounter   int
 	verbosity      int
 }
@@ -95,13 +94,11 @@ func NewManager(ctx context.Context, bootstrapHost host.Host, verbosity int) (*M
 func (m *Manager) SetCallbacks(
 	onPeerData func(receiverPeerID, senderPeerID, protocol string, data any),
 	onTopicData func(receiverPeerID, topic, senderPeerID string, data any),
-	onTopicJoined func(receiverPeerID, topic, joinedPeerID string),
-	onTopicLeft func(receiverPeerID, topic, leftPeerID string),
+	onPeerChange func(receiverPeerID, topic, changedPeerID string, joined bool),
 ) {
 	m.onPeerData = onPeerData
 	m.onTopicData = onTopicData
-	m.onTopicJoined = onTopicJoined
-	m.onTopicLeft = onTopicLeft
+	m.onPeerChange = onPeerChange
 }
 
 // LogVerbose logs a message if the level is within the verbosity threshold
@@ -165,30 +162,51 @@ func (g *allowPrivateGater) InterceptUpgraded(c network.Conn) (allow bool, reaso
 	return true, 0
 }
 
-// CreatePeer creates a new peer with its own libp2p host
-func (m *Manager) CreatePeer(requestedPeerKey string) (peerID string, peerKey string, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+// prepareCreatePeer generates/parses the private key and checks for duplicates
+// Must be called with m.mu locked
+func (m *Manager) prepareCreatePeer(requestedPeerKey string) (priv crypto.PrivKey, err error) {
 	// Generate or parse peer identity
-	var priv crypto.PrivKey
-
 	if requestedPeerKey != "" {
 		// Decode and unmarshal the private key
 		keyBytes, err := crypto.ConfigDecodeKey(requestedPeerKey)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to decode peer key: %w", err)
+			return nil, fmt.Errorf("failed to decode peer key: %w", err)
 		}
 		priv, err = crypto.UnmarshalPrivateKey(keyBytes)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to unmarshal peer key: %w", err)
+			return nil, fmt.Errorf("failed to unmarshal peer key: %w", err)
 		}
 	} else {
 		// Generate new identity
 		priv, _, err = crypto.GenerateKeyPairWithReader(crypto.Ed25519, 2048, rand.Reader)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to generate key pair: %w", err)
+			return nil, fmt.Errorf("failed to generate key pair: %w", err)
 		}
+	}
+
+	// Derive peer ID to check for duplicates
+	pid, err := peer.IDFromPublicKey(priv.GetPublic())
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive peer ID: %w", err)
+	}
+
+	// Check if peer ID is already registered (duplicate)
+	if _, exists := m.peers[pid.String()]; exists {
+		return nil, fmt.Errorf("peer ID already in use (possible duplicate browser tab)")
+	}
+
+	return priv, nil
+}
+
+// CreatePeer creates a new peer with its own libp2p host
+func (m *Manager) CreatePeer(requestedPeerKey string) (peerID string, peerKey string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Prepare and validate peer creation (checks for duplicates)
+	priv, err := m.prepareCreatePeer(requestedPeerKey)
+	if err != nil {
+		return "", "", err
 	}
 
 	// Marshal and encode the private key for return
@@ -700,8 +718,8 @@ func (p *Peer) monitorTopic(monitor *TopicMonitor) {
 				// Check if this is a new peer (joined)
 				if !monitor.knownPeers[peerIDStr] {
 					monitor.knownPeers[peerIDStr] = true
-					if p.manager.onTopicJoined != nil {
-						p.manager.onTopicJoined(p.peerID.String(), monitor.Topic, peerIDStr)
+					if p.manager.onPeerChange != nil {
+						p.manager.onPeerChange(p.peerID.String(), monitor.Topic, peerIDStr, true)
 					}
 				}
 			}
@@ -710,8 +728,8 @@ func (p *Peer) monitorTopic(monitor *TopicMonitor) {
 			for peerIDStr := range monitor.knownPeers {
 				if !currentPeerSet[peerIDStr] {
 					delete(monitor.knownPeers, peerIDStr)
-					if p.manager.onTopicLeft != nil {
-						p.manager.onTopicLeft(p.peerID.String(), monitor.Topic, peerIDStr)
+					if p.manager.onPeerChange != nil {
+						p.manager.onPeerChange(p.peerID.String(), monitor.Topic, peerIDStr, false)
 					}
 				}
 			}

@@ -1,479 +1,561 @@
-# ipfs-webapp
+# Build Peer-to-Peer Web Apps in Minutes
 
-A Go application to host peer-to-peer applications using IPFS and libp2p with a TypeScript client library for browser communication.
+**p2p-webapp** lets you build real-time, peer-to-peer web applications with just JavaScript. No backend servers. No hosting costs. No complex setup.
 
-## Overview
+```typescript
+// Connect to a peer-to-peer chat room in 4 lines
+const [peerID, peerKey] = await client.connect();
+await client.subscribe('chat', (peerID, data) => {
+  showMessage(data.text);
+});
+await client.publish('chat', { text: 'Hello, P2P world!' });
+```
 
-ipfs-webapp proxies opinionated IPFS and libp2p operations for managed peers, providing a WebSocket-based protocol for easy browser integration. It consists of:
+## Why Build P2P Web Apps?
 
-- **Go Server**: Single executable that manages IPFS nodes, libp2p peers, and serves web applications
-- **TypeScript Client**: Browser library for communication with the server via WebSocket
-- **Demo Application**: Built-in chatroom example demonstrating P2P messaging
+✨ **No Backend Required** - Your users connect directly to each other
+💰 **Zero Hosting Costs** - No servers to maintain or pay for
+🚀 **Real-Time by Default** - Messages arrive instantly, no polling needed
+🔒 **Privacy-First** - Data travels directly between peers
+🌍 **Resilient** - No single point of failure
+📦 **Simple** - Just JavaScript, works like any other web app
 
-## Core Principles
+## What Can You Build?
 
-- **SOLID Principles**: Clean architecture with separation of concerns
-- **Comprehensive Testing**: Unit tests for all components
-- **Minimal Code**: Focused, essential functionality only
+- **Chat Applications** - Public rooms and private messages
+- **Collaborative Tools** - Real-time editors, whiteboards, kanban boards
+- **Multiplayer Games** - Card games, turn-based games, party games
+- **Social Apps** - Micro-communities, forums, social networks
+- **File Sharing** - Direct file transfers between users
+- **Live Feeds** - News, updates, real-time dashboards
+- **Voting Systems** - Polls, surveys, decision-making tools
 
-## Installation
+See it in action: Run `./p2p-webapp serve` to try a working chatroom with direct messaging!
 
-### Prerequisites
+## Quick Start
 
-- (to build) Go 1.25 or higher -- or download release binary
-- Modern web browser
+### 1. Get the Tool
 
-### Building from Source
+Download the latest release or build from source:
 
 ```bash
-git clone https://github.com/zot/ipfs-webapp
-cd ipfs-webapp
+git clone https://github.com/zot/p2p-webapp
+cd p2p-webapp
 make build
 ```
 
-This will:
-1. Install TypeScript dependencies if needed
-2. Build the TypeScript client library
-3. Copy the library to the demo directory
-4. Build the Go binary
-
-The compiled client library (`client.js`, `client.d.ts`) will be available in `internal/commands/demo/` for use in your own projects.
-
-## Commands
-
-### `serve`
-
-Serve a peer-to-peer application from the current directory.
-
-**Directory Structure Required:**
-```
-.
-├── html/          # Website files (must contain index.html)
-├── ipfs/          # Content to serve via IPFS
-└── storage/       # Server storage (peer keys, datastore)
-```
-
-**Usage:**
-```bash
-./ipfs-webapp serve [--noopen] [-p PORT] [-v | -vv | -vvv]
-```
-
-**Flags:**
-- `--noopen`: Do not open browser automatically
-- `-p, --port PORT`: Specify port to listen on (default: auto-select starting from 10000)
-  - If the specified port is unavailable, automatically tries the next port (up to 100 attempts)
-  - Example: `./ipfs-webapp serve -p 8080`
-- `-v, --verbose`: Verbose output (can be specified multiple times)
-  - `-v`: Log peer creation, connections, and messages
-  - `-vv`: Additional debug information
-  - `-vvv`: Maximum verbosity
-
-This will:
-1. Initialize an IPFS node with persistent peer ID
-2. Start HTTP server on specified port (or auto-select starting from 10000) with SPA routing support
-3. Open default browser to the application (unless --noopen is specified)
-4. Expose WebSocket endpoint at `/ws`
-
-**SPA Routing**: The server automatically handles client-side routing by serving `index.html` for routes without file extensions while preserving the URL path. Real files are served normally, and missing files with extensions return 404.
-
-### `demo`
-
-Run the built-in chatroom demo application.
-
-**Requirements:**
-- Current directory must be empty
-
-**Usage:**
-```bash
-mkdir demo-test
-cd demo-test
-../ipfs-webapp demo [--noopen] [-v | -vv | -vvv]
-```
-
-**Flags:**
-- `--noopen`: Do not open browser automatically
-- `-v, --verbose`: Verbose output (can be specified multiple times)
-  - `-v`: Log peer creation, connections, and messages
-  - `-vv`: Additional debug information
-  - `-vvv`: Maximum verbosity
-
-This extracts the demo chatroom application and runs it.
-
-### `ls`
-
-List files available in the embedded demo directory.
-
-**Usage:**
-```bash
-./ipfs-webapp ls
-```
-
-**Description:**
-- Shows all files available in the embedded demo directory
-- Displays file names that can be copied with the `cp` command
-- Files are listed in alphabetical order
-- Useful for discovering what files are available before using `cp`
-
-**Example Output:**
-```
-Files available in embedded demo directory (7):
-
-client.d.ts
-client.js
-index.html
-index.js
-ipfs-webapp-client.js
-types.d.ts
-types.js
-```
-
-### `cp`
-
-Copy files from the embedded demo directory to a target location.
-
-**Usage:**
-```bash
-./ipfs-webapp cp SOURCE... DEST
-```
-
-**Arguments:**
-- `SOURCE...`: One or more glob patterns or file names from the embedded demo directory
-- `DEST`: Destination directory (will be created if it doesn't exist)
-
-**Examples:**
-```bash
-# Copy client library files
-./ipfs-webapp cp client.js my-project/
-./ipfs-webapp cp client.* my-project/         # copies client.js and client.d.ts
-
-# Copy multiple file types
-./ipfs-webapp cp *.js *.html my-project/
-
-# Extract specific demo files
-./ipfs-webapp cp index.html style.css my-app/html/
-```
-
-**Behavior:**
-- Supports glob patterns (e.g., `*.js`, `client.*`) for flexible file selection
-- Creates destination directory if it doesn't exist
-- Preserves original file names (no renaming)
-- Validates that at least one file matches the patterns
-- Fails if no files match or if destination is not a directory when copying multiple files
-
-**Note**: This command is particularly useful for extracting the TypeScript client library (`client.js`, `client.d.ts`) from the embedded demo files for use in your own projects.
-
-### `version`
-
-Display version information:
+### 2. Try the Demo
 
 ```bash
-./ipfs-webapp version
+./p2p-webapp serve
 ```
 
-## TypeScript Client Library
+The bundled binary ships with a complete chatroom demo. Open the URL in multiple browser tabs or windows to see peers connecting to each other. Try the group chat and direct messages!
 
-The TypeScript client library is automatically built as part of the main build process. After building, the compiled library is available in `internal/commands/demo/` for use in your applications.
+### 3. Build Your Own App
 
-To build just the client library:
+Extract the client library:
 
 ```bash
-make client
+./p2p-webapp cp 'client.*' my-app/
 ```
 
-Or build from the client directory directly:
-
-```bash
-cd pkg/client
-npm install
-npm run build
-```
-
-### Quick Start
-
-```typescript
-import { IPFSWebAppClient } from '@ipfs-webapp/client';
-
-const client = new IPFSWebAppClient();
-
-// Connect to server
-await client.connect();
-
-// Initialize peer
-const [peerID, peerKey] = await client.peer();
-console.log('Peer ID:', peerID);
-
-// Start protocol with listener for direct messages
-const PROTOCOL = '/my-app/1.0.0';
-await client.start(PROTOCOL, (peer, data) => {
-  console.log(`Message from ${peer}:`, data);
-});
-
-// Send to specific peer
-await client.send(targetPeerID, PROTOCOL, { message: 'Hello!' });
-
-// Subscribe to topic for pub/sub
-await client.subscribe('my-topic', (senderPeerID, data) => {
-  console.log(`Topic message from ${senderPeerID}:`, data);
-});
-
-// Publish to topic
-await client.publish('my-topic', { message: 'Hello, P2P!' });
-```
-
-### API Reference
-
-#### Connection Management
-
-**`connect(url?: string): Promise<void>`**
-- Connect to WebSocket server
-- Auto-detects URL from browser location if not provided
-
-**`close(): void`**
-- Close WebSocket connection
-- Cleans up all listeners
-
-#### Peer Operations
-
-**`peer(peerKey?: string): Promise<[string, string]>`**
-- Initialize peer with optional existing peer key
-- Returns `[peerID, peerKey]` tuple
-- Must be called first before other operations
-- Can only be called once per connection
-
-**`get peerID(): string | null`**
-- Get current peer ID
-
-**`get peerKey(): string | null`**
-- Get current peer key
-
-#### Protocol Streams
-
-**`start(protocol: string, onData: (peer: string, data: any) => void | Promise<void>): Promise<void>`**
-- Start a protocol and register listener
-- Listener receives `(peer, data)` for ALL messages on this protocol
-- Must be called before sending on the protocol
-- Protocol validation enforced
-
-**`stop(protocol: string): Promise<void>`**
-- Stop protocol and remove listener
-- Prevents further sending on this protocol
-
-**`send(peer: string, protocol: string, data: any): Promise<void>`**
-- Send data to peer on protocol
-- Uses (peer, protocol) addressing
-- Protocol must be started first
-- Server manages stream lifecycle transparently
-
-#### Pub/Sub
-
-**`subscribe(topic: string, onData: (peerID: string, data: any) => void | Promise<void>): Promise<void>`**
-- Subscribe to topic
-- `onData` callback receives sender peer ID and data
-- Listener auto-removed on unsubscribe or disconnect
-
-**`publish(topic: string, data: any): Promise<void>`**
-- Publish data to topic
-
-**`unsubscribe(topic: string): Promise<void>`**
-- Unsubscribe from topic
-
-**`listPeers(topic: string): Promise<string[]>`**
-- Get list of peer IDs subscribed to a topic
-
-**Note**: All callbacks support both synchronous and asynchronous (Promise-returning) functions.
-
-## Protocol Specification
-
-### Message Format
-
-All messages are JSON with the following structure:
-
-```typescript
-{
-  requestid: number,      // Sequential ID starting at 0
-  method?: string,        // Method name for requests
-  params?: any,          // Method parameters
-  result?: any,          // Response result
-  error?: {              // Error information
-    code: number,
-    message: string
-  },
-  isresponse: boolean    // true for responses, false for requests
-}
-```
-
-### Client Request Methods
-
-| Method | Parameters | Response | Description |
-|--------|-----------|----------|-------------|
-| `peer` | `peerkey?: string` | `{peerid: string, peerkey: string}` | Initialize peer (required first, once only) |
-| `start` | `protocol: string` | `null` | Start protocol (required before sending) |
-| `stop` | `protocol: string` | `null` | Stop protocol |
-| `send` | `peer: string, protocol: string, data: any` | `null` | Send data to peer on protocol |
-| `subscribe` | `topic: string` | `null` | Subscribe to topic |
-| `publish` | `topic: string, data: any` | `null` | Publish to topic |
-| `unsubscribe` | `topic: string` | `null` | Unsubscribe from topic |
-| `listPeers` | `topic: string` | `string[]` (peer IDs) | Get peers on topic |
-
-### Server Request Methods
-
-These are sent from server to client:
-
-| Method | Parameters | Description |
-|--------|-----------|-------------|
-| `peerData` | `peer: string, protocol: string, data: any` | Data from peer on protocol |
-| `topicData` | `topic: string, peerid: string, data: any` | Topic message |
-
-## Architecture
-
-### Go Components
-
-```
-internal/
-├── protocol/       # Message protocol and routing
-│   ├── messages.go    # Message type definitions
-│   └── handler.go     # Request/response handling
-├── peer/          # Peer and connection management
-│   └── manager.go     # libp2p peer manager
-├── ipfs/          # IPFS node integration
-│   └── node.go        # ipfs-lite wrapper
-├── server/        # HTTP and WebSocket server
-│   ├── server.go      # HTTP server
-│   └── websocket.go   # WebSocket handler
-└── commands/      # CLI commands
-    ├── serve.go       # Serve command
-    ├── demo.go        # Demo command
-    └── version.go     # Version command
-```
-
-### Design Patterns
-
-- **Dependency Inversion**: Protocol handler depends on PeerManager interface
-- **Single Responsibility**: Each component has one clear purpose
-- **Open/Closed**: Easy to extend with new message types
-- **Interface Segregation**: Minimal, focused interfaces
-
-## Development
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building TypeScript Client
-
-```bash
-cd pkg/client
-npm install
-npm run build
-```
-
-### Project Structure
-
-```
-ipfs-webapp/
-├── cmd/ipfs-webapp/     # Main entry point
-├── internal/            # Go implementation
-├── pkg/client/          # TypeScript client library
-├── demo/               # Demo application
-├── CLAUDE.md           # Project specification
-├── plan.md             # Implementation plan
-└── README.md           # This file
-```
-
-## Examples
-
-### Simple Chat Application
+Create your `index.html`:
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
-  <title>P2P Chat</title>
+  <title>My P2P App</title>
 </head>
 <body>
   <div id="messages"></div>
-  <input type="text" id="message-input" placeholder="Type a message...">
-  <button id="send-button">Send</button>
+  <input id="input" placeholder="Type a message...">
+  <button id="send">Send</button>
+
+  <script type="module">
+    import { IPFSWebAppClient } from './client.js';
+
+    const client = new IPFSWebAppClient();
+    const messages = document.getElementById('messages');
+    const input = document.getElementById('input');
+    const send = document.getElementById('send');
+
+    // Connect and initialize peer
+    const [peerID, peerKey] = await client.connect();
+
+    // Subscribe to chat topic with peer tracking
+    await client.subscribe('chat',
+      // Message callback
+      (peerID, data) => {
+        const msg = document.createElement('div');
+        msg.textContent = `${peerID.slice(0, 8)}: ${data.text}`;
+        messages.appendChild(msg);
+      },
+      // Peer join/leave callback
+      (peerID, joined) => {
+        console.log(`${peerID} ${joined ? 'joined' : 'left'}`);
+      }
+    );
+
+    // Send messages
+    send.onclick = async () => {
+      if (input.value.trim()) {
+        await client.publish('chat', { text: input.value });
+        input.value = '';
+      }
+    };
+  </script>
+</body>
+</html>
+```
+
+Set up your project structure:
+
+```bash
+mkdir -p html ipfs storage
+mv index.html html/
+mv client.* html/
+```
+
+Run your app:
+
+```bash
+./p2p-webapp serve --dir .
+```
+
+That's it! Your P2P app is running. Open multiple browser tabs to see peers connecting.
+
+**Tip:** You can also bundle your app into a standalone binary with `./p2p-webapp bundle . -o my-app`, then users can just run `./my-app serve` without needing the directory structure.
+
+## API Overview
+
+### Connection & Setup
+
+```typescript
+import { IPFSWebAppClient } from './client.js';
+
+const client = new IPFSWebAppClient();
+
+// Connect to server and initialize peer
+const [peerID, peerKey] = await client.connect();
+
+// Save peerKey to maintain identity across sessions
+localStorage.setItem('peerKey', peerKey);
+```
+
+### Group Chat (Pub/Sub)
+
+```typescript
+// Join a chat room
+await client.subscribe('room-name',
+  // Receive messages
+  (peerID, data) => console.log(`${peerID}: ${data.message}`),
+  // Track who's online (optional)
+  (peerID, joined) => console.log(`${peerID} ${joined ? 'joined' : 'left'}`)
+);
+
+// Send to everyone in the room
+await client.publish('room-name', { message: 'Hello everyone!' });
+
+// See who's in the room
+const peers = await client.listPeers('room-name');
+```
+
+### Direct Messages (Peer-to-Peer)
+
+```typescript
+// Listen for direct messages
+await client.start('/my-app/dm/1.0.0', (fromPeerID, data) => {
+  console.log(`DM from ${fromPeerID}:`, data.message);
+});
+
+// Send to a specific peer
+await client.send(targetPeerID, '/my-app/dm/1.0.0', {
+  message: 'Hi there!'
+});
+
+// Get delivery confirmation (optional)
+await client.send(targetPeerID, '/my-app/dm/1.0.0', data,
+  () => console.log('Message delivered!')
+);
+```
+
+### Cleaning Up
+
+```typescript
+// Leave a chat room
+await client.unsubscribe('room-name');
+
+// Stop receiving direct messages
+await client.stop('/my-app/dm/1.0.0');
+
+// Disconnect
+client.close();
+```
+
+## Complete Examples
+
+### Example 1: Simple Chat Room
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>P2P Chat</title></head>
+<body>
+  <div id="messages"></div>
+  <input id="input" type="text">
+  <button id="send">Send</button>
 
   <script type="module">
     import { IPFSWebAppClient } from './client.js';
 
     const client = new IPFSWebAppClient();
     const messagesDiv = document.getElementById('messages');
-    const messageInput = document.getElementById('message-input');
-    const sendButton = document.getElementById('send-button');
+    const input = document.getElementById('input');
 
-    // Store messages for display when switching views
-    const roomMessages = [];
+    const [myPeerID] = await client.connect();
 
-    function addMessage(text, isOwn) {
+    await client.subscribe('chat', (peerID, data) => {
       const msg = document.createElement('div');
-      msg.textContent = `${isOwn ? 'You' : 'Peer'}: ${text}`;
+      msg.className = peerID === myPeerID ? 'own' : 'other';
+      msg.textContent = data.text;
       messagesDiv.appendChild(msg);
-    }
+    });
 
-    async function init() {
-      // Connect and initialize peer
-      await client.connect();
-      const [peerID, peerKey] = await client.peer();
-      console.log('My Peer ID:', peerID);
-
-      // Subscribe to chat topic
-      await client.subscribe('chat', (senderPeerID, data) => {
-        if (senderPeerID !== client.peerID) {
-          // Always store messages
-          roomMessages.push({ text: data.message, isOwn: false });
-          // Display if in room mode
-          addMessage(data.message, false);
-        }
-      });
-
-      // Send message handler
-      async function sendMessage() {
-        const text = messageInput.value.trim();
-        if (!text) return;
-
-        await client.publish('chat', { message: text });
-        roomMessages.push({ text, isOwn: true });
-        addMessage(text, true);
-        messageInput.value = '';
+    document.getElementById('send').onclick = async () => {
+      if (input.value.trim()) {
+        await client.publish('chat', { text: input.value });
+        input.value = '';
       }
-
-      sendButton.addEventListener('click', sendMessage);
-      messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-      });
-    }
-
-    init().catch(console.error);
+    };
   </script>
 </body>
 </html>
 ```
 
-### Direct Peer Connection
+### Example 2: Private Messaging
 
 ```typescript
-const PROTOCOL = '/my-protocol/1.0.0';
+const PROTOCOL = '/my-app/1.0.0';
 
-// Start protocol with listener (both peers do this)
-await client.start(PROTOCOL, (peer, data) => {
-  console.log(`Received from ${peer}:`, data);
-  // This listener receives ALL messages on this protocol
-  // The 'peer' parameter tells you who sent it
+// Listen for incoming messages
+await client.start(PROTOCOL, (fromPeer, data) => {
+  showNotification(`Message from ${fromPeer}: ${data.text}`);
 });
 
-// Send data to specific peer
-// No connection management needed - server handles it transparently
-await client.send(targetPeerID, PROTOCOL, { hello: 'world' });
-
-// Stop protocol when done
-await client.stop(PROTOCOL);
+// Send private message
+async function sendPrivateMessage(toPeerID, text) {
+  await client.send(
+    toPeerID,
+    PROTOCOL,
+    { text },
+    () => showStatus('Delivered ✓')
+  );
+}
 ```
 
-**Note**: The server transparently manages stream lifecycle, retry logic, and reliability. Your application simply uses (peer, protocol) addressing.
+### Example 3: Presence & User List
+
+```typescript
+const onlinePeers = new Set();
+
+await client.subscribe('my-app',
+  // Handle messages
+  (peerID, data) => handleMessage(peerID, data),
+  // Track online users
+  (peerID, joined) => {
+    if (joined) {
+      onlinePeers.add(peerID);
+      showUserJoined(peerID);
+    } else {
+      onlinePeers.delete(peerID);
+      showUserLeft(peerID);
+    }
+    updateUserList(Array.from(onlinePeers));
+  }
+);
+
+// Get current users
+const currentPeers = await client.listPeers('my-app');
+currentPeers.forEach(p => onlinePeers.add(p));
+updateUserList(currentPeers);
+```
+
+## Project Structure
+
+Your P2P web app needs this structure:
+
+```
+my-app/
+├── html/              # Your web application
+│   ├── index.html     # Main page
+│   ├── client.js      # P2P client library (copy from demo)
+│   ├── client.d.ts    # TypeScript definitions
+│   └── ...            # Your other web files
+├── ipfs/              # Optional: IPFS content
+└── storage/           # Created automatically: peer data
+```
+
+## Commands
+
+### `serve` - Run Your P2P App
+
+Two modes:
+
+**1. Bundled mode (default):**
+```bash
+./p2p-webapp serve [--noopen] [-p PORT]
+```
+
+Serves directly from the bundled site without extraction. Efficient - no filesystem needed!
+- Requires bundled binary (the built binary ships bundled by default)
+- Creates `.p2p-webapp-storage` in current directory for peer data
+- Perfect for quick testing and distribution
+
+**2. Directory mode:**
+```bash
+./p2p-webapp serve --dir PATH [--noopen] [-p PORT]
+```
+
+Serves from a filesystem directory. Use this for:
+- Development with your own site
+- After extracting with `extract` command
+- Directory must contain `html/` with `index.html`
+
+Both modes automatically:
+- Initialize P2P networking
+- Open your default browser
+- Support client-side routing (SPA)
+- Serve on localhost (default port 10000)
+
+**Options:**
+- `--dir PATH` - Serve from directory instead of bundle
+- `--noopen` - Don't open browser
+- `-p 8080` - Use specific port
+- `-v` - Show connection logs (use `-vv` or `-vvv` for more detail)
+
+### `extract` - Extract Bundled Site
+
+```bash
+mkdir test && cd test
+../p2p-webapp extract
+```
+
+Extracts the bundled site to the current directory (must be empty). The default bundle contains a chatroom demo. After extraction, run `./p2p-webapp serve --dir .` to start the server.
+
+### `bundle` - Create Standalone App
+
+```bash
+./p2p-webapp bundle my-site -o my-app
+```
+
+Bundles your site into a standalone binary that can be distributed. No compilation tools needed! The bundled binary contains everything users need to run your P2P app.
+
+**Requirements:**
+- Site directory with `html/` containing `index.html`
+- Optional `ipfs/` and `storage/` directories
+
+Users can run your bundled app directly:
+- `./my-app serve` - Run immediately from bundle
+- `./my-app extract` - Extract to filesystem first (optional)
+
+### `cp` - Copy Client Library
+
+```bash
+./p2p-webapp cp 'client.*' my-app/html/
+```
+
+Copies files from the bundled site to your project. Works directly on the bundled content without needing extraction. Supports glob patterns:
+- `client.*` - Both .js and .d.ts files
+- `*.js` - All JavaScript files
+- `index.html` - Specific files
+
+### `ls` - List Available Files
+
+```bash
+./p2p-webapp ls
+```
+
+Shows all files available in the bundled site. Reads directly from the bundle without extraction.
+
+## How It Works
+
+When you run `p2p-webapp serve`:
+
+1. The bundled site is served directly from the binary (or from filesystem with `--dir`)
+2. A local server starts on your machine
+3. Your web app connects via WebSocket
+4. The server manages IPFS and libp2p networking
+5. Your JavaScript code uses simple APIs
+6. Messages flow directly between users' browsers
+
+```
+Browser A ←→ Local Server A ←→ P2P Network ←→ Local Server B ←→ Browser B
+```
+
+Each user runs their own local server (or shares one). No central server needed!
+
+**Want to see how it works?** Extract the demo with `./p2p-webapp extract` to examine the source code.
+
+## Advanced Features
+
+### Persistent Identity
+
+Save the peer key to keep the same identity across sessions:
+
+```typescript
+const savedKey = localStorage.getItem('peerKey');
+const [peerID, peerKey] = await client.connect(savedKey);
+if (!savedKey) {
+  localStorage.setItem('peerKey', peerKey);
+}
+```
+
+### Protocol Versioning
+
+Use semantic versioning in your protocol names:
+
+```typescript
+const PROTOCOL_V1 = '/my-app/messages/1.0.0';
+const PROTOCOL_V2 = '/my-app/messages/2.0.0';
+
+// Support both versions
+await client.start(PROTOCOL_V1, handleV1Message);
+await client.start(PROTOCOL_V2, handleV2Message);
+```
+
+### Error Handling
+
+All methods return Promises that reject on error:
+
+```typescript
+try {
+  await client.publish('topic', data);
+} catch (error) {
+  console.error('Failed to send:', error);
+  showRetryButton();
+}
+```
+
+### Async Callbacks
+
+Callbacks can be async if you need to do work:
+
+```typescript
+await client.subscribe('events', async (peerID, data) => {
+  // Do async work like saving to IndexedDB
+  await database.save(data);
+  updateUI();
+});
+```
+
+## TypeScript Support
+
+Full TypeScript definitions included:
+
+```typescript
+import { IPFSWebAppClient } from './client.js';
+
+const client = new IPFSWebAppClient();
+
+// All methods are fully typed
+await client.subscribe('topic',
+  (peerID: string, data: any) => {
+    // peerID is typed as string
+  },
+  (peerID: string, joined: boolean) => {
+    // joined is typed as boolean
+  }
+);
+```
+
+## FAQ
+
+**Q: Do my users need to install anything?**
+A: Only you (the developer) run `p2p-webapp` locally. Your users just open your web app in their browser.
+
+**Q: How do users discover each other?**
+A: The IPFS/libp2p network handles peer discovery automatically. Users on the same topic find each other.
+
+**Q: Can I deploy this to production?**
+A: Currently, `p2p-webapp` is designed for local development and small-scale deployments. Each user needs to run their own instance or connect to a trusted instance.
+
+**Q: What browsers are supported?**
+A: All modern browsers with WebSocket support (Chrome, Firefox, Safari, Edge).
+
+**Q: Is the connection secure?**
+A: libp2p handles encryption between peers. The WebSocket connection to localhost is not encrypted by default.
+
+**Q: Can I use this with React/Vue/Svelte?**
+A: Yes! The client library is framework-agnostic. Just import it and use it in your components.
+
+**Q: How many peers can connect?**
+A: This depends on network conditions and the IPFS/libp2p configuration. Small to medium groups work well.
+
+## API Reference
+
+### Core Methods
+
+| Method | Description |
+|--------|-------------|
+| `connect(peerKey?)` | Connect to server and initialize peer (returns [peerID, peerKey]) |
+| `subscribe(topic, onData, onPeerChange?)` | Join chat room with optional presence |
+| `publish(topic, data)` | Send to all room members |
+| `listPeers(topic)` | Get list of room members |
+| `start(protocol, onData)` | Listen for direct messages |
+| `send(peer, protocol, data, onAck?)` | Send direct message with optional confirmation |
+| `unsubscribe(topic)` | Leave chat room |
+| `stop(protocol)` | Stop listening for direct messages |
+| `close()` | Disconnect |
+
+### Properties
+
+| Property | Description |
+|----------|-------------|
+| `peerID` | Your peer ID (read-only) |
+| `peerKey` | Your peer key (read-only, save this!) |
+
+## Building from Source
+
+### Prerequisites
+
+- Go 1.25+ (only for building)
+- Node.js 18+ (only for building client library)
+
+### Build Steps
+
+```bash
+git clone https://github.com/zot/p2p-webapp
+cd p2p-webapp
+make build
+```
+
+This builds:
+1. TypeScript client library (`pkg/client/`)
+2. Temporary Go server binary
+3. Final bundled binary (`./p2p-webapp`) with demo site included
+
+The final binary ships with the demo bundled and ready to extract.
+
+### Development
+
+```bash
+# Build just the client library
+make client
+
+# Clean build artifacts
+make clean
+
+# Run tests
+go test ./...
+```
+
+## Protocol Details
+
+For those interested in the underlying protocol, see [CLAUDE.md](CLAUDE.md) for the complete specification.
+
+The WebSocket protocol uses JSON-RPC style messages. The TypeScript client handles all protocol details automatically.
 
 ## License
 
@@ -481,7 +563,26 @@ MIT
 
 ## Contributing
 
-1. Follow SOLID principles
-2. Write unit tests for new features
-3. Keep code minimal and focused
-4. Update documentation
+Contributions welcome! This project follows SOLID principles and emphasizes simplicity. Please:
+
+1. Keep code minimal and focused
+2. Add tests for new features
+3. Update documentation
+4. Follow the existing code style
+
+## Links
+
+- GitHub: https://github.com/zot/p2p-webapp
+- IPFS: https://ipfs.io
+- libp2p: https://libp2p.io
+
+---
+
+**Start building your P2P web app today!** 🚀
+
+```bash
+./p2p-webapp serve              # Try the demo (runs from bundle)
+./p2p-webapp extract            # Extract demo to examine code
+./p2p-webapp serve --dir .      # Run your own site
+./p2p-webapp bundle . -o my-app # Create standalone binary
+```

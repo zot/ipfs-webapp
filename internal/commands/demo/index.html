@@ -466,8 +466,7 @@
         // Initialize
         (async () => {
             try {
-                await client.connect();
-                const [peerID, peerKey] = await client.peer();
+                const [peerID, peerKey] = await client.connect();
 
                 peerIDDiv.textContent = `Your Peer ID: ${peerID}`;
                 setStatus('Connected', 'connected');
@@ -483,44 +482,45 @@
                     }
                 });
 
-                // Subscribe to room chat
-                await client.subscribe(ROOM_TOPIC, (senderPeerID, data) => {
-                    if (senderPeerID !== client.peerID) {
-                        // Always store room messages
-                        storeRoomMessage(senderPeerID, data.text, false);
-                        // Only display if currently in room mode
-                        if (currentMode === 'room') {
-                            addMessage(senderPeerID, data.text, false);
-                        }
-                    }
-                });
-
-                // Function to refresh peer list using listPeers
-                const refreshPeerList = async () => {
-                    try {
-                        const peerIDs = await client.listPeers(ROOM_TOPIC);
-                        // Remove peers that are no longer in the list
-                        for (const [existingPeerID] of peers) {
-                            if (!peerIDs.includes(existingPeerID)) {
-                                removePeerFromList(existingPeerID);
+                // Subscribe to room chat with peer change monitoring
+                await client.subscribe(
+                    ROOM_TOPIC,
+                    // Message callback
+                    (senderPeerID, data) => {
+                        if (senderPeerID !== client.peerID) {
+                            // Always store room messages
+                            storeRoomMessage(senderPeerID, data.text, false);
+                            // Only display if currently in room mode
+                            if (currentMode === 'room') {
+                                addMessage(senderPeerID, data.text, false);
                             }
                         }
-                        // Add new peers
-                        for (const peerID of peerIDs) {
-                            if (peerID !== client.peerID) {
-                                addPeerToList(peerID, `Peer ${peerID.substring(0, 8)}`);
-                            }
+                    },
+                    // Peer change callback (joined: boolean)
+                    (peerID, joined) => {
+                        if (peerID === client.peerID) return; // Skip ourselves
+
+                        if (joined) {
+                            addPeerToList(peerID, `Peer ${peerID.substring(0, 8)}`);
+                            peers.set(peerID, { name: `Peer ${peerID.substring(0, 8)}` });
+                        } else {
+                            removePeerFromList(peerID);
                         }
-                    } catch (error) {
-                        console.error('Failed to refresh peer list:', error);
                     }
-                };
+                );
 
-                // Initial peer list refresh
-                await refreshPeerList();
-
-                // Refresh peer list every 5 seconds
-                setInterval(refreshPeerList, 5000);
+                // Get initial peer list
+                try {
+                    const peerIDs = await client.listPeers(ROOM_TOPIC);
+                    for (const peerID of peerIDs) {
+                        if (peerID !== client.peerID) {
+                            addPeerToList(peerID, `Peer ${peerID.substring(0, 8)}`);
+                            peers.set(peerID, { name: `Peer ${peerID.substring(0, 8)}` });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to get initial peer list:', error);
+                }
 
                 messageInput.disabled = false;
                 sendButton.disabled = false;

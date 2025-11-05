@@ -1,7 +1,7 @@
 {
-  "name": "@ipfs-webapp/client",
+  "name": "@p2p-webapp/client",
   "version": "0.1.0",
-  "description": "TypeScript client library for ipfs-webapp",
+  "description": "TypeScript client library for p2p-webapp",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

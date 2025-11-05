@@ -2,25 +2,30 @@
 
 ## Try the Demo
 
-The fastest way to see ipfs-webapp in action:
+The fastest way to see p2p-webapp in action:
 
 ```bash
-# Build the application
-go build -o ipfs-webapp ./cmd/ipfs-webapp
+# Build and run the demo (recommended)
+make demo
 
-# Create a test directory
-mkdir demo-test
-cd demo-test
-
-# Run the demo
-../ipfs-webapp demo
+# Or build and run manually
+make build
+./p2p-webapp serve
 ```
 
 This will:
-1. Extract the chatroom demo application
-2. Start the server on a random port
+1. Serve the bundled chatroom demo directly from the binary (no extraction needed)
+2. Start the server on a random port (default: 10000+)
 3. Open your browser automatically
 4. Display your peer ID
+
+**Optional**: To extract and modify the demo:
+```bash
+mkdir demo-test && cd demo-test
+../p2p-webapp extract
+# Edit files in html/, ipfs/, storage/
+../p2p-webapp serve --dir .
+```
 
 ## Test the Chat
 
@@ -169,8 +174,28 @@ Create `html/index.html`:
 ### 3. Run Your Application
 
 ```bash
-../ipfs-webapp serve
+# Serve from the directory (must use --dir flag)
+../p2p-webapp serve --dir .
 ```
+
+## Package for Distribution
+
+Once your application is working, bundle it into a standalone binary for easy distribution:
+
+```bash
+# From your application directory
+../p2p-webapp bundle . -o my-app
+
+# Distribute the single executable
+# Users can run it directly - no installation or extraction needed
+./my-app serve
+```
+
+**Benefits of bundling:**
+- Single executable file (no separate directories or files)
+- Runs directly from bundled content (no extraction step)
+- Users can still extract and modify with `./my-app extract`
+- Perfect for distribution and deployment
 
 ## Protocol Reference
 

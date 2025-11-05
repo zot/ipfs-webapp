@@ -1,26 +1,29 @@
 package commands
 
 import (
+	"archive/zip"
 	"fmt"
-	"io/fs"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zot/p2p-webapp/internal/bundle"
 )
 
 // CpCmd represents the cp command
 var CpCmd = &cobra.Command{
 	Use:   "cp SOURCE... DEST",
-	Short: "Copy files from embedded demo directory",
-	Long: `Copy files from the embedded demo directory to a target location.
+	Short: "Copy files from bundled site",
+	Long: `Copy files from the bundled site to a target location.
 Supports glob patterns for source selection (e.g., *.js, client.*).
-Similar to UNIX cp command but operates on embedded demo files.
+Similar to UNIX cp command but operates on bundled site files.
 
 Examples:
-  ipfs-webapp cp client.js my-project/          # copy single file
-  ipfs-webapp cp client.* my-project/           # copy client.js and client.d.ts
-  ipfs-webapp cp *.js *.html my-project/        # copy multiple patterns`,
+  p2p-webapp cp client.js my-project/          # copy single file
+  p2p-webapp cp client.* my-project/           # copy client.js and client.d.ts
+  p2p-webapp cp *.js *.html my-project/        # copy multiple patterns`,
 	Args: cobra.MinimumNArgs(2),
 	RunE: runCp,
 }
@@ -79,57 +82,84 @@ func runCp(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// findMatchingFiles returns all files in the embedded demo FS matching the pattern
+// findMatchingFiles returns all files in the bundled site matching the pattern
 func findMatchingFiles(pattern string) ([]string, error) {
+	// Get bundle reader
+	zipReader, err := bundle.GetBundleReader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read bundle: %w", err)
+	}
+	if zipReader == nil {
+		return nil, fmt.Errorf("binary is not bundled")
+	}
+
 	var matches []string
 
-	err := fs.WalkDir(demoFS, "demo", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	// List files from the html/ directory in the bundle
+	for _, f := range zipReader.File {
+		// Only include files from html/ directory
+		if strings.HasPrefix(f.Name, "html/") && !f.FileInfo().IsDir() {
+			// Remove html/ prefix
+			relPath := strings.TrimPrefix(f.Name, "html/")
+			fileName := filepath.Base(relPath)
+
+			// Match against pattern
+			matched, err := filepath.Match(pattern, fileName)
+			if err != nil {
+				return nil, fmt.Errorf("invalid pattern %s: %w", pattern, err)
+			}
+
+			if matched {
+				matches = append(matches, relPath)
+			}
 		}
+	}
 
-		// Skip the demo directory itself
-		if path == "demo" {
-			return nil
-		}
-
-		// Skip directories
-		if d.IsDir() {
-			return nil
-		}
-
-		// Get filename without demo/ prefix
-		relPath := path[5:] // Remove "demo/" prefix
-		fileName := filepath.Base(relPath)
-
-		// Match against pattern
-		matched, err := filepath.Match(pattern, fileName)
-		if err != nil {
-			return fmt.Errorf("invalid pattern %s: %w", pattern, err)
-		}
-
-		if matched {
-			matches = append(matches, relPath)
-		}
-
-		return nil
-	})
-
-	return matches, err
+	return matches, nil
 }
 
-// copyFile copies a single file from the embedded FS to the destination directory
+// copyFile copies a single file from the bundle to the destination directory
 func copyFile(srcPath string, destDir string) error {
-	// Read from embedded FS
-	data, err := demoFS.ReadFile(filepath.Join("demo", srcPath))
+	// Get bundle reader
+	zipReader, err := bundle.GetBundleReader()
 	if err != nil {
-		return fmt.Errorf("failed to read embedded file: %w", err)
+		return fmt.Errorf("failed to read bundle: %w", err)
 	}
+	if zipReader == nil {
+		return fmt.Errorf("binary is not bundled")
+	}
+
+	// Find the file in the bundle
+	targetPath := "html/" + srcPath
+	var targetFile *zip.File
+	for _, f := range zipReader.File {
+		if f.Name == targetPath {
+			targetFile = f
+			break
+		}
+	}
+
+	if targetFile == nil {
+		return fmt.Errorf("file not found in bundle: %s", srcPath)
+	}
+
+	// Open file from bundle
+	rc, err := targetFile.Open()
+	if err != nil {
+		return fmt.Errorf("failed to open file from bundle: %w", err)
+	}
+	defer rc.Close()
 
 	// Write to destination
 	destPath := filepath.Join(destDir, filepath.Base(srcPath))
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+	outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer outFile.Close()
+
+	if _, err := io.Copy(outFile, rc); err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
 	}
 
 	return nil

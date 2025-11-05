@@ -1,4 +1,4 @@
-import { ProtocolDataCallback, TopicDataCallback, TopicJoinedCallback, TopicLeftCallback } from './types.js';
+import { ProtocolDataCallback, TopicDataCallback, PeerChangeCallback, AckCallback } from './types.js';
 export declare class IPFSWebAppClient {
     private ws;
     private _peerID;
@@ -7,23 +7,21 @@ export declare class IPFSWebAppClient {
     private pending;
     private protocolListeners;
     private topicListeners;
-    private topicJoinedListeners;
-    private topicLeftListeners;
+    private peerChangeListeners;
     private messageQueue;
     private processingMessage;
+    private nextAckNumber;
+    private ackCallbacks;
     /**
-     * Connect to the WebSocket server
+     * Connect to the WebSocket server and initialize peer identity
+     * @param peerKey Optional peer key to restore previous identity
+     * @returns Promise resolving to [peerID, peerKey] tuple
      */
-    connect(url?: string): Promise<void>;
+    connect(peerKey?: string): Promise<[string, string]>;
     /**
      * Close the WebSocket connection
      */
     close(): void;
-    /**
-     * Initialize or retrieve peer ID
-     * Returns an array [peerID, peerKey]
-     */
-    peer(peerKey?: string): Promise<[string, string]>;
     /**
      * Start a protocol with a data listener (required before sending)
      * The listener receives (peer, data) for all messages on this protocol
@@ -35,32 +33,29 @@ export declare class IPFSWebAppClient {
     stop(protocol: string): Promise<void>;
     /**
      * Send data to a peer on a protocol
+     * @param peer Target peer ID
+     * @param protocol Protocol name
+     * @param data Data to send
+     * @param onAck Optional callback invoked when delivery is confirmed
      */
-    send(peer: string, protocol: string, data: any): Promise<void>;
+    send(peer: string, protocol: string, data: any, onAck?: AckCallback): Promise<void>;
     /**
-     * Subscribe to a topic with data listener
+     * Subscribe to a topic with data listener and optional peer change listener
+     * Automatically monitors the topic for peer join/leave events if onPeerChange is provided
      */
-    subscribe(topic: string, onData: TopicDataCallback): Promise<void>;
+    subscribe(topic: string, onData: TopicDataCallback, onPeerChange?: PeerChangeCallback): Promise<void>;
     /**
      * Publish data to a topic
      */
     publish(topic: string, data: any): Promise<void>;
     /**
-     * Unsubscribe from a topic
+     * Unsubscribe from a topic and stop monitoring peer changes
      */
     unsubscribe(topic: string): Promise<void>;
     /**
      * List peers subscribed to a topic
      */
     listPeers(topic: string): Promise<string[]>;
-    /**
-     * Start monitoring a topic for peer join/leave events
-     */
-    monitor(topic: string, onJoined: TopicJoinedCallback, onLeft: TopicLeftCallback): Promise<void>;
-    /**
-     * Stop monitoring a topic for peer join/leave events
-     */
-    stopMonitor(topic: string): Promise<void>;
     /**
      * Get the current peer ID
      */

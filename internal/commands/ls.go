@@ -2,50 +2,43 @@ package commands
 
 import (
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zot/p2p-webapp/internal/bundle"
 )
 
 // LsCmd represents the ls command
 var LsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List files in embedded demo directory",
-	Long: `List files available in the embedded demo directory.
+	Short: "List files in bundled site",
+	Long: `List files available in the bundled site.
 Shows files that can be copied with the cp command.`,
 	RunE: runLs,
 }
 
 func runLs(cmd *cobra.Command, args []string) error {
+	// Get bundle reader
+	zipReader, err := bundle.GetBundleReader()
+	if err != nil {
+		return fmt.Errorf("failed to read bundle: %w", err)
+	}
+	if zipReader == nil {
+		return fmt.Errorf("binary is not bundled")
+	}
+
 	files := []string{}
 
-	// Walk the embedded filesystem
-	err := fs.WalkDir(demoFS, "demo", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	// List files from the html/ directory in the bundle
+	for _, f := range zipReader.File {
+		// Only include files from html/ directory
+		if strings.HasPrefix(f.Name, "html/") && !f.FileInfo().IsDir() {
+			// Remove html/ prefix
+			relPath := strings.TrimPrefix(f.Name, "html/")
+			files = append(files, relPath)
 		}
-
-		// Skip the demo directory itself
-		if path == "demo" {
-			return nil
-		}
-
-		// Skip directories
-		if d.IsDir() {
-			return nil
-		}
-
-		// Get filename without demo/ prefix
-		relPath := path[5:] // Remove "demo/" prefix
-		files = append(files, relPath)
-
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to list files: %w", err)
 	}
 
 	// Sort files alphabetically
@@ -53,11 +46,11 @@ func runLs(cmd *cobra.Command, args []string) error {
 
 	// Display files
 	if len(files) == 0 {
-		fmt.Println("No files found in embedded demo directory")
+		fmt.Println("No files found in bundled site")
 		return nil
 	}
 
-	fmt.Printf("Files available in embedded demo directory (%d):\n\n", len(files))
+	fmt.Printf("Files available in bundled site (%d):\n\n", len(files))
 	for _, file := range files {
 		fmt.Println(filepath.Base(file))
 	}

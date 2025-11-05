@@ -1,18 +1,23 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
-	"github.com/zot/ipfs-webapp/internal/peer"
-	"github.com/zot/ipfs-webapp/internal/protocol"
+	"github.com/zot/p2p-webapp/internal/peer"
+	"github.com/zot/p2p-webapp/internal/pidfile"
+	"github.com/zot/p2p-webapp/internal/protocol"
 )
 
 // Server manages the HTTP server and WebSocket connections
@@ -22,19 +27,90 @@ type Server struct {
 	peerManager    *peer.Manager
 	handler        *protocol.Handler
 	port           int
-	htmlDir        string
+	fileSystem     http.FileSystem
 	connections    map[*WSConnection]bool
 	peerConnection map[string]*WSConnection // Maps peerID to WSConnection
 	mu             sync.RWMutex
 }
 
-// NewServer creates a new HTTP server
-func NewServer(ctx context.Context, pm *peer.Manager, htmlDir string, port int) *Server {
+// zipFileSystem implements http.FileSystem for serving files from a ZIP archive
+type zipFileSystem struct {
+	reader *zip.Reader
+}
+
+// Open implements http.FileSystem interface
+func (zfs *zipFileSystem) Open(name string) (http.File, error) {
+	// Clean the path and remove leading slash
+	name = strings.TrimPrefix(filepath.Clean(name), "/")
+	if name == "." {
+		name = ""
+	}
+
+	// Build target path in ZIP (all files are under html/ prefix)
+	targetPath := "html/" + name
+
+	// Find and return the file from ZIP
+	for _, f := range zfs.reader.File {
+		if f.Name == targetPath && !f.FileInfo().IsDir() {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+
+			// Read entire file content
+			content, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+
+			return &zipFile{
+				name:    filepath.Base(targetPath),
+				content: content,
+				reader:  bytes.NewReader(content),
+				info:    f.FileInfo(),
+			}, nil
+		}
+	}
+
+	return nil, os.ErrNotExist
+}
+
+// zipFile implements http.File interface
+type zipFile struct {
+	name    string
+	content []byte
+	reader  *bytes.Reader
+	info    os.FileInfo
+}
+
+func (zf *zipFile) Read(p []byte) (int, error) {
+	return zf.reader.Read(p)
+}
+
+func (zf *zipFile) Seek(offset int64, whence int) (int64, error) {
+	return zf.reader.Seek(offset, whence)
+}
+
+func (zf *zipFile) Close() error {
+	return nil
+}
+
+func (zf *zipFile) Readdir(count int) ([]os.FileInfo, error) {
+	return nil, os.ErrInvalid
+}
+
+func (zf *zipFile) Stat() (os.FileInfo, error) {
+	return zf.info, nil
+}
+
+// NewServerFromDir creates a new HTTP server serving from a filesystem directory
+func NewServerFromDir(ctx context.Context, pm *peer.Manager, htmlDir string, port int) *Server {
 	s := &Server{
 		ctx:            ctx,
 		peerManager:    pm,
 		port:           port,
-		htmlDir:        htmlDir,
+		fileSystem:     http.Dir(htmlDir),
 		connections:    make(map[*WSConnection]bool),
 		peerConnection: make(map[string]*WSConnection),
 	}
@@ -42,12 +118,41 @@ func NewServer(ctx context.Context, pm *peer.Manager, htmlDir string, port int) 
 	// Create protocol handler
 	s.handler = protocol.NewHandler(pm)
 
+	// Set handler ack callback
+	s.handler.SetAckCallback(s.onSendAck)
+
 	// Set peer manager callbacks to send messages to WebSocket clients
 	pm.SetCallbacks(
 		s.onPeerData,
 		s.onTopicData,
-		s.onTopicJoined,
-		s.onTopicLeft,
+		s.onPeerChange,
+	)
+
+	return s
+}
+
+// NewServerFromBundle creates a new HTTP server serving from a bundled ZIP archive
+func NewServerFromBundle(ctx context.Context, pm *peer.Manager, bundleReader *zip.Reader, port int) *Server {
+	s := &Server{
+		ctx:            ctx,
+		peerManager:    pm,
+		port:           port,
+		fileSystem:     &zipFileSystem{reader: bundleReader},
+		connections:    make(map[*WSConnection]bool),
+		peerConnection: make(map[string]*WSConnection),
+	}
+
+	// Create protocol handler
+	s.handler = protocol.NewHandler(pm)
+
+	// Set handler ack callback
+	s.handler.SetAckCallback(s.onSendAck)
+
+	// Set peer manager callbacks to send messages to WebSocket clients
+	pm.SetCallbacks(
+		s.onPeerData,
+		s.onTopicData,
+		s.onPeerChange,
 	)
 
 	return s
@@ -70,7 +175,7 @@ func (s *Server) Start() error {
 	})
 
 	// Static file server with SPA routing fallback
-	mux.Handle("/", s.spaHandler(http.Dir(s.htmlDir)))
+	mux.Handle("/", s.spaHandler(s.fileSystem))
 
 	// Try to find an available port
 	var listener net.Listener
@@ -101,12 +206,22 @@ func (s *Server) Start() error {
 		}
 	}()
 
+	// Register this process in the PID tracking file
+	if err := pidfile.Register(); err != nil {
+		fmt.Printf("Warning: failed to register process: %v\n", err)
+	}
+
 	fmt.Printf("Server started on http://localhost:%d\n", s.port)
 	return nil
 }
 
 // Stop stops the HTTP server
 func (s *Server) Stop() error {
+	// Unregister from PID tracking file
+	if err := pidfile.Unregister(); err != nil {
+		fmt.Printf("Warning: failed to unregister process: %v\n", err)
+	}
+
 	// Close all WebSocket connections
 	s.mu.Lock()
 	for conn := range s.connections {
@@ -138,6 +253,14 @@ func (s *Server) UnregisterPeer(peerID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.peerConnection, peerID)
+}
+
+// IsPeerRegistered checks if a peer ID is already registered
+func (s *Server) IsPeerRegistered(peerID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, exists := s.peerConnection[peerID]
+	return exists
 }
 
 // OpenBrowser opens the default browser to the server URL
@@ -272,8 +395,8 @@ func (s *Server) onTopicData(receiverPeerID, topic, senderPeerID string, data an
 	}
 }
 
-func (s *Server) onTopicJoined(receiverPeerID, topic, joinedPeerID string) {
-	msg := s.handler.CreateJoinedMessage(topic, joinedPeerID)
+func (s *Server) onPeerChange(receiverPeerID, topic, changedPeerID string, joined bool) {
+	msg := s.handler.CreatePeerChangeMessage(topic, changedPeerID, joined)
 
 	// Send only to the connection that owns the receiving peer
 	s.mu.RLock()
@@ -282,22 +405,26 @@ func (s *Server) onTopicJoined(receiverPeerID, topic, joinedPeerID string) {
 
 	if exists {
 		if err := conn.SendMessage(msg); err != nil {
-			fmt.Printf("Failed to send joined message to peer %s: %v\n", receiverPeerID, err)
+			action := "joined"
+			if !joined {
+				action = "left"
+			}
+			fmt.Printf("Failed to send %s message to peer %s: %v\n", action, receiverPeerID, err)
 		}
 	}
 }
 
-func (s *Server) onTopicLeft(receiverPeerID, topic, leftPeerID string) {
-	msg := s.handler.CreateLeftMessage(topic, leftPeerID)
+func (s *Server) onSendAck(peerID string, ack int) {
+	msg := s.handler.CreateAckMessage(ack)
 
-	// Send only to the connection that owns the receiving peer
+	// Send only to the connection that owns the sending peer
 	s.mu.RLock()
-	conn, exists := s.peerConnection[receiverPeerID]
+	conn, exists := s.peerConnection[peerID]
 	s.mu.RUnlock()
 
 	if exists {
 		if err := conn.SendMessage(msg); err != nil {
-			fmt.Printf("Failed to send left message to peer %s: %v\n", receiverPeerID, err)
+			fmt.Printf("Failed to send ack message to peer %s: %v\n", peerID, err)
 		}
 	}
 }

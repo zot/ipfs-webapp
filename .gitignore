@@ -1,5 +1,5 @@
 # Binaries
-ipfs-webapp
+p2p-webapp
 *.exe
 *.dll
 *.so

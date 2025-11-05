@@ -41,6 +41,7 @@ export interface SendRequest {
   peer: string;
   protocol: string;
   data: any;
+  ack: number; // -1 = no ack, >= 0 = request ack with this number
 }
 
 export interface SubscribeRequest {
@@ -64,14 +65,6 @@ export interface ListPeersResponse {
   peers: string[];
 }
 
-export interface MonitorRequest {
-  topic: string;
-}
-
-export interface StopMonitorRequest {
-  topic: string;
-}
-
 // Server request message types
 
 export interface PeerDataRequest {
@@ -86,14 +79,14 @@ export interface TopicDataRequest {
   data: any;
 }
 
-export interface JoinedRequest {
+export interface PeerChangeRequest {
   topic: string;
   peerid: string;
+  joined: boolean; // true = joined, false = left
 }
 
-export interface LeftRequest {
-  topic: string;
-  peerid: string;
+export interface AckRequest {
+  ack: number;
 }
 
 // Callback types
@@ -101,5 +94,5 @@ export interface LeftRequest {
 // Callbacks can be sync or async for flexibility
 export type ProtocolDataCallback = (peer: string, data: any) => void | Promise<void>;
 export type TopicDataCallback = (peerID: string, data: any) => void | Promise<void>;
-export type TopicJoinedCallback = (peerID: string) => void | Promise<void>;
-export type TopicLeftCallback = (peerID: string) => void | Promise<void>;
+export type PeerChangeCallback = (peerID: string, joined: boolean) => void | Promise<void>;
+export type AckCallback = () => void | Promise<void>;

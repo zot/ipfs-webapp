@@ -30,6 +30,7 @@ export interface SendRequest {
     peer: string;
     protocol: string;
     data: any;
+    ack: number;
 }
 export interface SubscribeRequest {
     topic: string;
@@ -47,12 +48,6 @@ export interface ListPeersRequest {
 export interface ListPeersResponse {
     peers: string[];
 }
-export interface MonitorRequest {
-    topic: string;
-}
-export interface StopMonitorRequest {
-    topic: string;
-}
 export interface PeerDataRequest {
     peer: string;
     protocol: string;
@@ -63,15 +58,15 @@ export interface TopicDataRequest {
     peerid: string;
     data: any;
 }
-export interface JoinedRequest {
+export interface PeerChangeRequest {
     topic: string;
     peerid: string;
+    joined: boolean;
 }
-export interface LeftRequest {
-    topic: string;
-    peerid: string;
+export interface AckRequest {
+    ack: number;
 }
 export type ProtocolDataCallback = (peer: string, data: any) => void | Promise<void>;
 export type TopicDataCallback = (peerID: string, data: any) => void | Promise<void>;
-export type TopicJoinedCallback = (peerID: string) => void | Promise<void>;
-export type TopicLeftCallback = (peerID: string) => void | Promise<void>;
+export type PeerChangeCallback = (peerID: string, joined: boolean) => void | Promise<void>;
+export type AckCallback = () => void | Promise<void>;

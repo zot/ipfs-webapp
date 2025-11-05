@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/zot/ipfs-webapp/internal/peer"
-	"github.com/zot/ipfs-webapp/internal/protocol"
+	"github.com/zot/p2p-webapp/internal/peer"
+	"github.com/zot/p2p-webapp/internal/protocol"
 )
 
 var upgrader = websocket.Upgrader{
