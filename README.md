@@ -13,12 +13,12 @@ await client.publish('chat', { text: 'Hello, P2P world!' });
 
 ## Why Build P2P Web Apps?
 
-✨ **No Backend Required** - Your users connect directly to each other
-💰 **Zero Hosting Costs** - No servers to maintain or pay for
-🚀 **Real-Time by Default** - Messages arrive instantly, no polling needed
-🔒 **Privacy-First** - Data travels directly between peers
-🌍 **Resilient** - No single point of failure
-📦 **Simple** - Just JavaScript, works like any other web app
+- ✨ **No Backend Required** - Your users connect directly to each other
+- 💰 **Zero Hosting Costs** - No servers to maintain or pay for
+- 🚀 **Real-Time by Default** - Messages arrive instantly, no polling needed
+- 🔒 **Privacy-First** - Data travels directly between peers
+- 🌍 **Resilient** - No single point of failure
+- 📦 **Simple** - Just JavaScript, works like any other web app
 
 ## What Can You Build?
 
