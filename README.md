@@ -5,10 +5,10 @@
 ```typescript
 // Connect to a peer-to-peer chat room in 4 lines
 const [peerID, peerKey] = await client.connect();
-await client.subscribe('chat', (peerID, data) => {
+await client.subscribe('my-chat-topic', (peerID, data) => {
   showMessage(data.text);
 });
-await client.publish('chat', { text: 'Hello, P2P world!' });
+await client.publish('my-chat-topic', { text: 'Hello, P2P world!' });
 ```
 
 ## Why Build P2P Web Apps?
@@ -85,7 +85,7 @@ Create your `index.html`:
     const [peerID, peerKey] = await client.connect();
 
     // Subscribe to chat topic with peer tracking
-    await client.subscribe('chat',
+    await client.subscribe('my-chat-topic',
       // Message callback
       (peerID, data) => {
         const msg = document.createElement('div');
@@ -101,7 +101,7 @@ Create your `index.html`:
     // Send messages
     send.onclick = async () => {
       if (input.value.trim()) {
-        await client.publish('chat', { text: input.value });
+        await client.publish('my-chat-topic', { text: input.value });
         input.value = '';
       }
     };
@@ -148,7 +148,7 @@ localStorage.setItem('peerKey', peerKey);
 
 ```typescript
 // Join a chat room
-await client.subscribe('room-name',
+await client.subscribe('my-room-name',
   // Receive messages
   (peerID, data) => console.log(`${peerID}: ${data.message}`),
   // Track who's online (optional)
@@ -156,10 +156,10 @@ await client.subscribe('room-name',
 );
 
 // Send to everyone in the room
-await client.publish('room-name', { message: 'Hello everyone!' });
+await client.publish('my-room-name', { message: 'Hello everyone!' });
 
 // See who's in the room
-const peers = await client.listPeers('room-name');
+const peers = await client.listPeers('my-room-name');
 ```
 
 ### Direct Messages (Peer-to-Peer)
@@ -185,7 +185,7 @@ await client.send(targetPeerID, '/my-app/dm/1.0.0', data,
 
 ```typescript
 // Leave a chat room
-await client.unsubscribe('room-name');
+await client.unsubscribe('my-room-name');
 
 // Stop receiving direct messages
 await client.stop('/my-app/dm/1.0.0');
@@ -216,7 +216,7 @@ client.close();
 
     const [myPeerID] = await client.connect();
 
-    await client.subscribe('chat', (peerID, data) => {
+    await client.subscribe('my-chat-topic', (peerID, data) => {
       const msg = document.createElement('div');
       msg.className = peerID === myPeerID ? 'own' : 'other';
       msg.textContent = data.text;
@@ -225,7 +225,7 @@ client.close();
 
     document.getElementById('send').onclick = async () => {
       if (input.value.trim()) {
-        await client.publish('chat', { text: input.value });
+        await client.publish('my-chat-topic', { text: input.value });
         input.value = '';
       }
     };
@@ -431,7 +431,7 @@ All methods return Promises that reject on error:
 
 ```typescript
 try {
-  await client.publish('topic', data);
+  await client.publish('my-topic', data);
 } catch (error) {
   console.error('Failed to send:', error);
   showRetryButton();
@@ -443,7 +443,7 @@ try {
 Callbacks can be async if you need to do work:
 
 ```typescript
-await client.subscribe('events', async (peerID, data) => {
+await client.subscribe('my-events', async (peerID, data) => {
   // Do async work like saving to IndexedDB
   await database.save(data);
   updateUI();
@@ -460,7 +460,7 @@ import { IPFSWebAppClient } from './client.js';
 const client = new IPFSWebAppClient();
 
 // All methods are fully typed
-await client.subscribe('topic',
+await client.subscribe('my-topic',
   (peerID: string, data: any) => {
     // peerID is typed as string
   },
