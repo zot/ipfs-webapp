@@ -1,6 +1,6 @@
 # Build Peer-to-Peer Web Apps in Minutes
 
-**p2p-webapp** lets you build real-time, peer-to-peer web applications with just JavaScript. No backend servers. No hosting costs. No complex setup.
+**p2p-webapp** lets you build real-time, peer-to-peer web applications with just JavaScript. No backend servers. No hosting costs. No signaling servers. No complex setup.
 
 ```typescript
 // Connect to a peer-to-peer chat room in 3 lines
@@ -13,6 +13,7 @@ await client.publish('my-chat-topic', { text: 'Hello, P2P world!' });
 
 - ✨ **No Backend Required** - Your users connect directly to each other
 - 💰 **Zero Hosting Costs** - No servers to maintain or pay for
+- 🔌 **No Signaling Servers** - Native peers, not browser-based WebRTC
 - 🚀 **Real-Time by Default** - Messages arrive instantly, no polling needed
 - 🔒 **Privacy-First** - Data travels directly between peers
 - 🌍 **Resilient** - No single point of failure
@@ -471,6 +472,11 @@ await client.subscribe('my-topic',
 
 **Q: Do my users need to install anything?**
 A: Each user runs `p2p-webapp` on their own computer.
+
+**Q: Why don't I need signaling servers like browser WebRTC apps?**
+A: Browser-only P2P apps using WebRTC require [signaling servers to exchange SDP connection information](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Signaling_and_video_calling) before peers can connect. This means "peer-to-peer" browser apps still depend on a central server infrastructure.
+
+p2p-webapp solves this by running native libp2p peers outside the browser. These peers connect directly using protocols like mDNS (local discovery) and DHT (global discovery) without needing a signaling intermediary. Your browser talks to its local peer via WebSocket, and the local peer handles all P2P networking natively—using the same battle-hardened code that powers systems like the Ethereum blockchain.
 
 **Q: How do users discover each other?**
 A: The IPFS/libp2p network handles peer discovery automatically. Users on the same topic find each other.
