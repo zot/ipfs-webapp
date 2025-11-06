@@ -260,11 +260,11 @@
     </main>
 
     <script type="module">
-        // Import the IPFSWebAppClient from the built library
-        import { IPFSWebAppClient } from './index.js';
+        // Import the connect function from the built library
+        import { connect } from './index.js';
 
-        // Application
-        const client = new IPFSWebAppClient();
+        // Application - client will be initialized in the async init function
+        let client;
         const messagesDiv = document.getElementById('messages');
         const statusDiv = document.getElementById('status');
         const peerIDDiv = document.getElementById('peer-id');
@@ -466,9 +466,10 @@
         // Initialize
         (async () => {
             try {
-                const [peerID, peerKey] = await client.connect();
+                // Connect and initialize the client
+                client = await connect();
 
-                peerIDDiv.textContent = `Your Peer ID: ${peerID}`;
+                peerIDDiv.textContent = `Your Peer ID: ${client.peerID}`;
                 setStatus('Connected', 'connected');
 
                 // Start protocol with listener for direct messages

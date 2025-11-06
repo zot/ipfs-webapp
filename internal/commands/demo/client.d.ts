@@ -1,5 +1,5 @@
 import { ProtocolDataCallback, TopicDataCallback, PeerChangeCallback, AckCallback } from './types.js';
-export declare class IPFSWebAppClient {
+export declare class P2PWebAppClient {
     private ws;
     private _peerID;
     private _peerKey;
@@ -71,3 +71,9 @@ export declare class IPFSWebAppClient {
     private handleClose;
     private sendRequest;
 }
+/**
+ * Convenience function to create and connect a P2PWebAppClient in one call
+ * @param peerKey Optional peer key to restore previous identity
+ * @returns Promise resolving to connected P2PWebAppClient instance
+ */
+export declare function connect(peerKey?: string): Promise<P2PWebAppClient>;

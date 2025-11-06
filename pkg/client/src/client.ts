@@ -18,7 +18,7 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
-export class IPFSWebAppClient {
+export class P2PWebAppClient {
   private ws: WebSocket | null = null;
   private _peerID: string | null = null;
   private _peerKey: string | null = null;
@@ -315,4 +315,15 @@ export class IPFSWebAppClient {
       this.ws!.send(JSON.stringify(msg));
     });
   }
+}
+
+/**
+ * Convenience function to create and connect a P2PWebAppClient in one call
+ * @param peerKey Optional peer key to restore previous identity
+ * @returns Promise resolving to connected P2PWebAppClient instance
+ */
+export async function connect(peerKey?: string): Promise<P2PWebAppClient> {
+  const client = new P2PWebAppClient();
+  await client.connect(peerKey);
+  return client;
 }

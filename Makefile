@@ -39,7 +39,7 @@ build: client
 
 # Run demo
 demo: build
-	./p2p-webapp serve
+	./p2p-webapp
 
 # Clean build artifacts
 clean:

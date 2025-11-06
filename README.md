@@ -3,11 +3,9 @@
 **p2p-webapp** lets you build real-time, peer-to-peer web applications with just JavaScript. No backend servers. No hosting costs. No complex setup.
 
 ```typescript
-// Connect to a peer-to-peer chat room in 4 lines
-const [peerID, peerKey] = await client.connect();
-await client.subscribe('my-chat-topic', (peerID, data) => {
-  showMessage(data.text);
-});
+// Connect to a peer-to-peer chat room in 3 lines
+const client = await connect();
+await client.subscribe('my-chat-topic', (peerID, data) => showMessage(data.text));
 await client.publish('my-chat-topic', { text: 'Hello, P2P world!' });
 ```
 
@@ -74,15 +72,14 @@ Create your `index.html`:
   <button id="send">Send</button>
 
   <script type="module">
-    import { IPFSWebAppClient } from './client.js';
+    import { connect } from './client.js';
 
-    const client = new IPFSWebAppClient();
     const messages = document.getElementById('messages');
     const input = document.getElementById('input');
     const send = document.getElementById('send');
 
-    // Connect and initialize peer
-    const [peerID, peerKey] = await client.connect();
+    // Connect to server
+    const client = await connect();
 
     // Subscribe to chat topic with peer tracking
     await client.subscribe('my-chat-topic',
@@ -121,7 +118,7 @@ mv client.* html/
 Run your app:
 
 ```bash
-./p2p-webapp serve --dir .
+./p2p-webapp --dir .
 ```
 
 That's it! Your P2P app is running. Open multiple browser tabs to see peers connecting.
@@ -133,15 +130,16 @@ That's it! Your P2P app is running. Open multiple browser tabs to see peers conn
 ### Connection & Setup
 
 ```typescript
-import { IPFSWebAppClient } from './client.js';
-
-const client = new IPFSWebAppClient();
+import { connect } from './client.js';
 
 // Connect to server and initialize peer
-const [peerID, peerKey] = await client.connect();
+const client = await connect();
+
+// Access peer identity
+console.log(client.peerID, client.peerKey);
 
 // Save peerKey to maintain identity across sessions
-localStorage.setItem('peerKey', peerKey);
+localStorage.setItem('peerKey', client.peerKey);
 ```
 
 ### Group Chat (Pub/Sub)
@@ -208,17 +206,16 @@ client.close();
   <button id="send">Send</button>
 
   <script type="module">
-    import { IPFSWebAppClient } from './client.js';
+    import { connect } from './client.js';
 
-    const client = new IPFSWebAppClient();
     const messagesDiv = document.getElementById('messages');
     const input = document.getElementById('input');
 
-    const [myPeerID] = await client.connect();
+    const client = await connect();
 
     await client.subscribe('my-chat-topic', (peerID, data) => {
       const msg = document.createElement('div');
-      msg.className = peerID === myPeerID ? 'own' : 'other';
+      msg.className = peerID === client.peerID ? 'own' : 'other';
       msg.textContent = data.text;
       messagesDiv.appendChild(msg);
     });
@@ -342,7 +339,7 @@ mkdir test && cd test
 ../p2p-webapp extract
 ```
 
-Extracts the bundled site to the current directory (must be empty). The default bundle contains a chatroom demo. After extraction, run `./p2p-webapp serve --dir .` to start the server.
+Extracts the bundled site to the current directory (must be empty). The default bundle contains a chatroom demo. After extraction, run `./p2p-webapp --dir .` to start the server.
 
 ### `bundle` - Create Standalone App
 
@@ -381,7 +378,7 @@ Shows all files available in the bundled site. Reads directly from the bundle wi
 
 ## How It Works
 
-When you run `p2p-webapp serve`:
+When you run `p2p-webapp`:
 
 1. The bundled site is served directly from the binary (or from filesystem with `--dir`)
 2. A local server starts on your machine
@@ -406,9 +403,9 @@ Save the peer key to keep the same identity across sessions:
 
 ```typescript
 const savedKey = localStorage.getItem('peerKey');
-const [peerID, peerKey] = await client.connect(savedKey);
+const client = await connect(savedKey);
 if (!savedKey) {
-  localStorage.setItem('peerKey', peerKey);
+  localStorage.setItem('peerKey', client.peerKey);
 }
 ```
 
@@ -455,9 +452,9 @@ await client.subscribe('my-events', async (peerID, data) => {
 Full TypeScript definitions included:
 
 ```typescript
-import { IPFSWebAppClient } from './client.js';
+import { connect } from './client.js';
 
-const client = new IPFSWebAppClient();
+const client = await connect();
 
 // All methods are fully typed
 await client.subscribe('my-topic',
@@ -495,11 +492,16 @@ A: This depends on network conditions and the IPFS/libp2p configuration. Small t
 
 ## API Reference
 
-### Core Methods
+### Connection
+
+| Function | Description |
+|----------|-------------|
+| `connect(peerKey?)` | Create and connect a client (returns P2PWebAppClient) |
+
+### Client Methods
 
 | Method | Description |
 |--------|-------------|
-| `connect(peerKey?)` | Connect to server and initialize peer (returns [peerID, peerKey]) |
 | `subscribe(topic, onData, onPeerChange?)` | Join chat room with optional presence |
 | `publish(topic, data)` | Send to all room members |
 | `listPeers(topic)` | Get list of room members |
@@ -509,7 +511,7 @@ A: This depends on network conditions and the IPFS/libp2p configuration. Small t
 | `stop(protocol)` | Stop listening for direct messages |
 | `close()` | Disconnect |
 
-### Properties
+### Client Properties
 
 | Property | Description |
 |----------|-------------|
