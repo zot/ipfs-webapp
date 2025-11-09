@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zot/p2p-webapp/internal/peer"
 	"github.com/zot/p2p-webapp/internal/pidfile"
@@ -23,8 +24,9 @@ import (
 
 // Server manages the HTTP server and WebSocket connections
 type Server struct {
-	ctx         context.Context
-	httpServer  *http.Server
+	ctx            context.Context
+	cancel         context.CancelFunc
+	httpServer     *http.Server
 	peerManager    *peer.Manager
 	handler        *protocol.Handler
 	port           int
@@ -32,6 +34,9 @@ type Server struct {
 	connections    map[*WSConnection]bool
 	peerConnection map[string]*WSConnection // Maps peerID to WSConnection
 	mu             sync.RWMutex
+	linger         bool
+	exitTimer      *time.Timer
+	exitTimerMu    sync.Mutex
 }
 
 // zipFileSystem implements http.FileSystem for serving files from a ZIP archive
@@ -109,14 +114,17 @@ func (zf *zipFile) Stat() (os.FileInfo, error) {
 }
 
 // NewServerFromDir creates a new HTTP server serving from a filesystem directory
-func NewServerFromDir(ctx context.Context, pm *peer.Manager, htmlDir string, port int) *Server {
+func NewServerFromDir(ctx context.Context, pm *peer.Manager, htmlDir string, port int, linger bool) *Server {
+	ctx, cancel := context.WithCancel(ctx)
 	s := &Server{
 		ctx:            ctx,
+		cancel:         cancel,
 		peerManager:    pm,
 		port:           port,
 		fileSystem:     http.Dir(htmlDir),
 		connections:    make(map[*WSConnection]bool),
 		peerConnection: make(map[string]*WSConnection),
+		linger:         linger,
 	}
 
 	// Create protocol handler
@@ -136,14 +144,17 @@ func NewServerFromDir(ctx context.Context, pm *peer.Manager, htmlDir string, por
 }
 
 // NewServerFromBundle creates a new HTTP server serving from a bundled ZIP archive
-func NewServerFromBundle(ctx context.Context, pm *peer.Manager, bundleReader *zip.Reader, port int) *Server {
+func NewServerFromBundle(ctx context.Context, pm *peer.Manager, bundleReader *zip.Reader, port int, linger bool) *Server {
+	ctx, cancel := context.WithCancel(ctx)
 	s := &Server{
 		ctx:            ctx,
+		cancel:         cancel,
 		peerManager:    pm,
 		port:           port,
 		fileSystem:     &zipFileSystem{reader: bundleReader},
 		connections:    make(map[*WSConnection]bool),
 		peerConnection: make(map[string]*WSConnection),
+		linger:         linger,
 	}
 
 	// Create protocol handler
@@ -221,10 +232,8 @@ func (s *Server) Start() error {
 
 // Stop stops the HTTP server
 func (s *Server) Stop() error {
-	// Unregister from PID tracking file
-	if err := pidfile.Unregister(); err != nil {
-		fmt.Printf("Warning: failed to unregister process: %v\n", err)
-	}
+	// Cancel exit timer if running
+	s.cancelExitTimer()
 
 	// Close all WebSocket connections
 	s.mu.Lock()
@@ -234,15 +243,57 @@ func (s *Server) Stop() error {
 	s.mu.Unlock()
 
 	// Stop HTTP server
+	var shutdownErr error
 	if s.httpServer != nil {
-		return s.httpServer.Shutdown(s.ctx)
+		shutdownErr = s.httpServer.Shutdown(s.ctx)
 	}
-	return nil
+
+	// Unregister from PID tracking file AFTER everything else is shut down
+	// This prevents race condition where ps shows no instances but process is still running
+	if err := pidfile.Unregister(); err != nil {
+		fmt.Printf("Warning: failed to unregister process: %v\n", err)
+	}
+
+	return shutdownErr
+}
+
+// startExitTimer starts a 5-second countdown to exit when no connections remain
+func (s *Server) startExitTimer() {
+	s.exitTimerMu.Lock()
+	defer s.exitTimerMu.Unlock()
+
+	// Cancel any existing timer
+	if s.exitTimer != nil {
+		s.exitTimer.Stop()
+	}
+
+	fmt.Println("Server closing in 5 seconds due to no active connections")
+
+	s.exitTimer = time.AfterFunc(5*time.Second, func() {
+		fmt.Println("Auto-exit: No connections for 5 seconds, shutting down...")
+		s.cancel() // Cancel context to trigger server shutdown
+	})
+}
+
+// cancelExitTimer cancels the exit countdown if a new connection arrives
+func (s *Server) cancelExitTimer() {
+	s.exitTimerMu.Lock()
+	defer s.exitTimerMu.Unlock()
+
+	if s.exitTimer != nil {
+		s.exitTimer.Stop()
+		s.exitTimer = nil
+	}
 }
 
 // Port returns the port the server is listening on
 func (s *Server) Port() int {
 	return s.port
+}
+
+// Done returns a channel that is closed when the server context is cancelled
+func (s *Server) Done() <-chan struct{} {
+	return s.ctx.Done()
 }
 
 // RegisterPeer registers a peer with its WebSocket connection
@@ -350,7 +401,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Register connection
 	s.mu.Lock()
 	s.connections[wsConn] = true
+	connectionCount := len(s.connections)
 	s.mu.Unlock()
+
+	// Cancel exit timer since we have a new connection
+	if connectionCount > 0 {
+		s.cancelExitTimer()
+	}
 
 	// Start connection
 	wsConn.Start()
@@ -360,8 +417,14 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		<-wsConn.closeCh
 		s.mu.Lock()
 		delete(s.connections, wsConn)
+		connectionCount := len(s.connections)
 		s.mu.Unlock()
 		fmt.Printf("WebSocket connection closed\n")
+
+		// Start exit timer if no connections remain and linger is disabled
+		if connectionCount == 0 && !s.linger {
+			s.startExitTimer()
+		}
 	}()
 
 	fmt.Printf("New WebSocket connection established\n")

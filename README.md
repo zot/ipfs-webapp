@@ -332,8 +332,38 @@ Both modes automatically:
 **Options:**
 - `--dir PATH` - Serve from directory instead of bundle
 - `--noopen` - Don't open browser
+- `--linger` - Keep server running after all browser clients disconnect (default: auto-exit after 5 seconds)
 - `-p 8080` - Use specific port
 - `-v` - Show connection logs (use `-vv` or `-vvv` for more detail)
+
+**Auto-Exit Behavior:**
+
+By default, the server automatically exits when all browser clients disconnect:
+- When the last WebSocket connection closes, a 5-second countdown begins
+- Message displayed: "Server closing in 5 seconds due to no active connections"
+- If a new browser connects within 5 seconds, countdown is cancelled
+- Each disconnection starts a fresh 5-second countdown
+
+Benefits:
+- Clean shutdown when you close your browser
+- No orphaned server processes
+- Automatic cleanup after development sessions
+
+Use `--linger` to disable auto-exit for:
+- Testing with multiple tabs that frequently reconnect
+- Development workflows with page reloads
+- Long-running server scenarios
+
+Example workflows:
+```bash
+# Development mode (auto-exit enabled)
+./p2p-webapp --dir my-app
+# Close browser → server exits automatically after 5 seconds
+
+# Testing mode (auto-exit disabled)
+./p2p-webapp --dir my-app --linger --noopen
+# Browser tabs can close/reconnect without server exiting
+```
 
 ### `extract` - Extract Bundled Site
 

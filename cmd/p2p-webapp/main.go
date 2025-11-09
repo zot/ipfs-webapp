@@ -18,6 +18,7 @@ import (
 
 var (
 	noOpen  bool
+	linger  bool
 	verbose int
 	port    int
 	dir     string
@@ -48,6 +49,7 @@ With --dir flag:
 
 func init() {
 	rootCmd.Flags().BoolVar(&noOpen, "noopen", false, "Do not open browser automatically")
+	rootCmd.Flags().BoolVar(&linger, "linger", false, "Keep server running after all WebSocket connections close")
 	rootCmd.Flags().CountVarP(&verbose, "verbose", "v", "Verbose output (can be specified multiple times: -v, -vv, -vvv)")
 	rootCmd.Flags().IntVarP(&port, "port", "p", 0, "Port to listen on (default: auto-select starting from 10000)")
 	rootCmd.Flags().StringVar(&dir, "dir", "", "Directory to serve from (if not specified, serves from bundled site)")
@@ -94,7 +96,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 		// Create HTTP server from directory
 		htmlDir := filepath.Join(dir, "html")
-		srv = server.NewServerFromDir(ctx, peerManager, htmlDir, port)
+		srv = server.NewServerFromDir(ctx, peerManager, htmlDir, port, linger)
 	} else {
 		// Bundle mode: serve from bundled site
 		bundleReader, err := bundle.GetBundleReader()
@@ -127,7 +129,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 
 		// Create HTTP server from bundle
-		srv = server.NewServerFromBundle(ctx, peerManager, bundleReader, port)
+		srv = server.NewServerFromBundle(ctx, peerManager, bundleReader, port, linger)
 	}
 
 	// Start server
@@ -146,12 +148,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Server running at http://localhost:%d\n", srv.Port())
 	}
 
-	// Wait for interrupt signal
+	// Wait for interrupt signal or server context cancellation (auto-exit)
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	<-sigCh
 
-	fmt.Println("\nShutting down...")
+	select {
+	case <-sigCh:
+		fmt.Println("\nShutting down...")
+	case <-srv.Done():
+		// Server context was cancelled (auto-exit triggered)
+		fmt.Println("Server context cancelled")
+	}
+
 	return nil
 }
 

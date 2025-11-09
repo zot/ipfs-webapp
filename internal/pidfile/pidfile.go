@@ -20,8 +20,8 @@ type PIDFile struct {
 
 var mu sync.Mutex
 
-// withLockedFile handles file opening, locking, reading, verification, and cleanup
-func withLockedFile(flags int, fn func(*os.File, []int32) error) error {
+// withLockedPIDFile handles file opening, locking, reading, verification, and cleanup
+func withLockedPIDFile(flags int, fn func(*os.File, []int32) error) error {
 	// Ensure directory exists
 	dir := filepath.Dir(pidFilePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -130,7 +130,7 @@ func Register() error {
 
 	currentPID := int32(os.Getpid())
 
-	return withLockedFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
+	return withLockedPIDFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
 		// Add current if not present
 		for _, pid := range pids {
 			if pid == currentPID {
@@ -150,7 +150,7 @@ func Unregister() error {
 
 	currentPID := int32(os.Getpid())
 
-	return withLockedFile(os.O_RDWR, func(file *os.File, pids []int32) error {
+	return withLockedPIDFile(os.O_RDWR, func(file *os.File, pids []int32) error {
 		filtered := []int32{}
 		for _, pid := range pids {
 			if pid != currentPID {
@@ -167,7 +167,7 @@ func List() ([]int32, error) {
 	defer mu.Unlock()
 
 	var result []int32
-	err := withLockedFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
+	err := withLockedPIDFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
 		result = pids
 		return nil
 	})
@@ -195,7 +195,7 @@ func Kill(pid int32) error {
 	}
 
 	// Remove from tracking file (best-effort)
-	withLockedFile(os.O_RDWR, func(file *os.File, pids []int32) error {
+	withLockedPIDFile(os.O_RDWR, func(file *os.File, pids []int32) error {
 		filtered := []int32{}
 		for _, p := range pids {
 			if p != pid {
@@ -214,7 +214,7 @@ func KillAll() (int, error) {
 	defer mu.Unlock()
 
 	var toKill []int32
-	err := withLockedFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
+	err := withLockedPIDFile(os.O_RDWR|os.O_CREATE, func(file *os.File, pids []int32) error {
 		toKill = pids
 		return writePIDFile(file, []int32{}) // Clear file
 	})
